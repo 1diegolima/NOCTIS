@@ -2,7 +2,6 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -10,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -221,12 +219,18 @@ export default function WorkoutsScreen() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={[styles.container, { backgroundColor: theme.background }]}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <SafeAreaView edges={['top']} style={styles.safeArea}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xxxl }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled">
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: tabBarHeight + Spacing.xxxl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          bounces={true}
+          alwaysBounceVertical={true}>
           {/* Header */}
           <View style={styles.header}>
             <ThemedText type="header">
@@ -302,6 +306,7 @@ export default function WorkoutsScreen() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled={true}
                   contentContainerStyle={styles.exerciseNavScroll}>
                   {activeExerciseList.map((re, idx) => {
                     const isSelected = currentExerciseIndex === idx;
@@ -719,9 +724,8 @@ export default function WorkoutsScreen() {
               )}
             </View>
           )}
-          </ScrollView>
-        </SafeAreaView>
-      </TouchableWithoutFeedback>
+        </ScrollView>
+      </SafeAreaView>
 
       {/* Modal: Prévia da Sessão de Treino antes de Iniciar */}
       <Modal
@@ -977,6 +981,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   safeArea: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
