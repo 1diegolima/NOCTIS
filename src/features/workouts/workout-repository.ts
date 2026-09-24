@@ -97,4 +97,32 @@ export const workoutRepository = {
       totalTonnage: Math.round(totalTonnage),
     };
   },
+
+  getWorkoutDaysThisWeek(): Set<number> {
+    // Retorna os dias da semana (0=Dom, 1=Seg, ..., 6=Sáb) com treino concluído na semana atual
+    const now = new Date();
+    // Início da semana: segunda-feira (ou domingo como primeiro dia)
+    const dayOfWeek = now.getDay(); // 0=Dom, 1=Seg ...
+    // Calcular início da semana (segunda-feira)
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    const sessions = db
+      .select()
+      .from(workoutSessions)
+      .where(gte(workoutSessions.startedAt, weekStart.getTime()))
+      .all()
+      .filter((s) => s.startedAt < weekEnd.getTime());
+
+    const days = new Set<number>();
+    for (const s of sessions) {
+      days.add(new Date(s.startedAt).getDay());
+    }
+    return days;
+  },
 };

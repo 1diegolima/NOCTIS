@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { WeeklyBar } from '@/components/weekly-bar';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { WorkoutSession } from '@/database/schema';
 import { workoutRepository } from '@/features/workouts/workout-repository';
@@ -18,14 +19,18 @@ export default function HomeScreen() {
 
   const [summary, setSummary] = useState({ workoutsCount: 0, setsCount: 0, totalTonnage: 0 });
   const [recentWorkouts, setRecentWorkouts] = useState<WorkoutSession[]>([]);
+  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+  const todayJsDay = new Date().getDay();
 
   const loadDashboardData = useCallback(() => {
     try {
       initialize();
       const weekly = workoutRepository.getWeeklySummary();
       const all = workoutRepository.getAll();
+      const days = workoutRepository.getWorkoutDaysThisWeek();
       setSummary(weekly);
       setRecentWorkouts(all.slice(0, 5));
+      setCompletedDays(days);
     } catch (e) {
       console.error('Erro ao carregar dados do painel:', e);
     }
@@ -61,6 +66,23 @@ export default function HomeScreen() {
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
               Construa disciplina em silêncio.
             </ThemedText>
+          </View>
+
+          {/* Barra Semanal */}
+          <View
+            style={[
+              styles.weeklyCard,
+              { backgroundColor: theme.card, borderColor: theme.cardBorder },
+            ]}>
+            <View style={styles.weeklyHeader}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                SEMANA ATUAL
+              </ThemedText>
+              <ThemedText type="caption" style={{ color: theme.primary }}>
+                {completedDays.size}/7 dias
+              </ThemedText>
+            </View>
+            <WeeklyBar completedDays={completedDays} todayJsDay={todayJsDay} />
           </View>
 
           {/* Card Principal: Treino */}
@@ -235,6 +257,17 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  weeklyCard: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  weeklyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   mainCard: {
     borderRadius: Radius.md,
