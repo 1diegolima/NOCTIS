@@ -4,6 +4,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -52,6 +53,8 @@ export default function WorkoutsScreen() {
   const [history, setHistory] = useState<WorkoutWithSets[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [weeklyWorkoutsCount, setWeeklyWorkoutsCount] = useState(0);
+  const [previewWorkout, setPreviewWorkout] = useState<RoutineWorkoutWithExercises | null>(null);
+  const [completedTodayIds, setCompletedTodayIds] = useState<Set<string>>(new Set());
 
   // Timer de Descanso
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -76,6 +79,9 @@ export default function WorkoutsScreen() {
     // Contar treinos desta semana para calcular sessão sugerida
     const summary = workoutRepository.getWeeklySummary();
     setWeeklyWorkoutsCount(summary.workoutsCount);
+    // Obter treinos de rotina já concluídos hoje
+    const todayDone = workoutRepository.getCompletedRoutineWorkoutIdsToday();
+    setCompletedTodayIds(todayDone);
   }, [initialize]);
 
   useFocusEffect(
@@ -89,8 +95,15 @@ export default function WorkoutsScreen() {
     ? weeklyWorkoutsCount % activeRoutine.workouts.length
     : 0;
 
-  // Exercícios da sessão ativa
-  const currentWorkoutFromRoutine = activeRoutine?.workouts[0] ?? null;
+  // Exercícios da sessão ativa (vinculados ao routineWorkoutId real da sessão)
+  const currentWorkoutFromRoutine =
+    activeRoutine?.workouts.find(
+      (w) =>
+        (activeWorkout?.routineWorkoutId && w.id === activeWorkout.routineWorkoutId) ||
+        (activeWorkout?.name && w.name === activeWorkout.name)
+    ) ??
+    activeRoutine?.workouts[0] ??
+    null;
   const activeExerciseList = currentWorkoutFromRoutine?.exercises ?? [];
   const currentRoutineExercise = activeExerciseList[currentExerciseIndex] ?? null;
   const currentExercise = currentRoutineExercise?.exercise ?? null;
@@ -112,12 +125,15 @@ export default function WorkoutsScreen() {
     : [];
 
   const handleStartRoutineWorkout = (rw: RoutineWorkoutWithExercises) => {
-    startNewWorkout(rw.name);
+    startNewWorkout(rw.name, rw.id);
+    setPreviewWorkout(null);
     setCurrentExerciseIndex(0);
     if (rw.exercises.length > 0 && rw.exercises[0].exercise) {
       useActiveWorkoutStore.getState().selectExercise(rw.exercises[0].exercise);
-      setWeightInput(rw.exercises[0].workingWeightKg.toString());
-      setRepsInput(rw.exercises[0].repsMin.toString());
+      setWeightInput(
+        rw.exercises[0].workingWeightKg > 0 ? rw.exercises[0].workingWeightKg.toString() : ''
+      );
+      setRepsInput(rw.exercises[0].repsMin > 0 ? rw.exercises[0].repsMin.toString() : '');
     }
   };
 
@@ -477,15 +493,24 @@ export default function WorkoutsScreen() {
                   {/* Sessão Sugerida */}
                   {activeRoutine.workouts[suggestedWorkoutIndex] && (
                     <Pressable
-                      onPress={() => handleStartRoutineWorkout(activeRoutine.workouts[suggestedWorkoutIndex])}
+                      onPress={() => setPreviewWorkout(activeRoutine.workouts[suggestedWorkoutIndex])}
                       style={[
                         styles.suggestedCard,
                         { backgroundColor: theme.primaryDark, borderColor: theme.primary },
                       ]}>
-                      <View style={styles.suggestedBadge}>
-                        <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
-                          SUGERIDA PARA HOJE
-                        </ThemedText>
+                      <View style={{ flexDirection: 'row', gap: Spacing.xs, alignItems: 'center' }}>
+                        <View style={styles.suggestedBadge}>
+                          <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                            SUGERIDA PARA HOJE
+                          </ThemedText>
+                        </View>
+                        {completedTodayIds.has(activeRoutine.workouts[suggestedWorkoutIndex].id) && (
+                          <View style={styles.doneTodayBadge}>
+                            <ThemedText type="caption" style={{ color: '#22c55e', fontWeight: '700' }}>
+                              ✓ CONCLUÍDO HOJE
+                            </ThemedText>
+                          </View>
+                        )}
                       </View>
                       <View style={styles.workoutPickTop}>
                         <ThemedText type="title" style={{ color: '#FFFFFF' }}>
@@ -504,7 +529,7 @@ export default function WorkoutsScreen() {
                       </ThemedText>
                       <View style={[styles.startChip, { backgroundColor: theme.primary, borderColor: theme.primaryHover }]}>
                         <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                          Iniciar Agora →
+                          Ver Treino & Iniciar →
                         </ThemedText>
                       </View>
                     </Pressable>
@@ -522,16 +547,25 @@ export default function WorkoutsScreen() {
                           .map((rw) => (
                           <Pressable
                             key={rw.id}
-                            onPress={() => handleStartRoutineWorkout(rw)}
+                            onPress={() => setPreviewWorkout(rw)}
                             style={[
                               styles.workoutPickCard,
                               { backgroundColor: theme.card, borderColor: theme.cardBorder },
                             ]}>
                             <View style={styles.workoutPickTop}>
                               <ThemedText type="smallBold">{rw.name}</ThemedText>
-                              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                                {rw.exercises.length} ex.
-                              </ThemedText>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+                                {completedTodayIds.has(rw.id) && (
+                                  <View style={styles.doneTodayMiniBadge}>
+                                    <ThemedText type="caption" style={{ color: '#22c55e', fontSize: 10, fontWeight: '700' }}>
+                                      ✓ Feito
+                                    </ThemedText>
+                                  </View>
+                                )}
+                                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                                  {rw.exercises.length} ex.
+                                </ThemedText>
+                              </View>
                             </View>
                           </Pressable>
                         ))}
@@ -594,6 +628,127 @@ export default function WorkoutsScreen() {
           </ScrollView>
         </SafeAreaView>
       </TouchableWithoutFeedback>
+
+      {/* Modal: Prévia da Sessão de Treino antes de Iniciar */}
+      <Modal
+        visible={previewWorkout !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPreviewWorkout(null)}>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder },
+            ]}>
+            {previewWorkout && (
+              <>
+                <View style={styles.previewHeader}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="caption" style={{ color: theme.primary }}>
+                      PRÉVIA DA SESSÃO
+                    </ThemedText>
+                    <ThemedText type="title">{previewWorkout.name}</ThemedText>
+                  </View>
+                  <Pressable
+                    onPress={() => setPreviewWorkout(null)}
+                    hitSlop={12}
+                    style={styles.modalCloseBtn}>
+                    <ThemedText type="title" style={{ color: theme.textSecondary }}>
+                      ✕
+                    </ThemedText>
+                  </Pressable>
+                </View>
+
+                {completedTodayIds.has(previewWorkout.id) && (
+                  <View
+                    style={[
+                      styles.completedTodayBanner,
+                      { backgroundColor: 'rgba(34, 197, 94, 0.12)', borderColor: '#22c55e' },
+                    ]}>
+                    <ThemedText type="smallBold" style={{ color: '#22c55e' }}>
+                      ✓ Sessão já concluída hoje
+                    </ThemedText>
+                    <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                      Você já realizou este treino hoje. Você ainda pode executá-lo novamente se desejar.
+                    </ThemedText>
+                  </View>
+                )}
+
+                <ThemedText type="caption" style={{ color: theme.textMuted, marginTop: Spacing.xs }}>
+                  EXERCÍCIOS PROGRAMADOS ({previewWorkout.exercises.length})
+                </ThemedText>
+
+                <ScrollView
+                  style={styles.previewExerciseList}
+                  showsVerticalScrollIndicator={false}>
+                  {previewWorkout.exercises.map((re, idx) => {
+                    const lastPerf = re.exercise
+                      ? workoutRepository.getLastExercisePerformance(re.exercise.id)
+                      : null;
+
+                    return (
+                      <View
+                        key={re.id}
+                        style={[
+                          styles.previewExerciseItem,
+                          { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                        ]}>
+                        <View style={styles.previewExerciseTop}>
+                          <View style={styles.previewExerciseIndexBadge}>
+                            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                              #{idx + 1}
+                            </ThemedText>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText type="smallBold">{re.exercise?.name}</ThemedText>
+                            <ThemedText
+                              type="caption"
+                              style={{ color: theme.textSecondary, textTransform: 'capitalize' }}>
+                              {re.exercise?.muscleGroup} • {re.exercise?.movementPattern}
+                            </ThemedText>
+                          </View>
+                        </View>
+
+                        <View style={styles.previewExerciseDetails}>
+                          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                            Meta: {re.workingSets} séries × {re.repsMin}-{re.repsMax} reps
+                            {re.workingWeightKg > 0 ? ` • ${re.workingWeightKg} kg` : ''}
+                            {` • ${re.restSeconds}s descanso`}
+                          </ThemedText>
+                          {lastPerf && (
+                            <ThemedText type="caption" style={{ color: theme.primaryHover }}>
+                              Último treino: {lastPerf.weightKg} kg × {lastPerf.reps} reps
+                            </ThemedText>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={styles.previewActions}>
+                  <Pressable
+                    onPress={() => handleStartRoutineWorkout(previewWorkout)}
+                    style={[styles.startWorkoutModalBtn, { backgroundColor: theme.primary }]}>
+                    <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                      INICIAR TREINO AGORA ➔
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setPreviewWorkout(null)}
+                    style={[styles.closePreviewBtn, { borderColor: theme.cardBorder }]}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                      Voltar
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -808,5 +963,94 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    maxHeight: '85%',
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  modalCloseBtn: {
+    padding: Spacing.xs,
+  },
+  completedTodayBanner: {
+    padding: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    gap: 2,
+  },
+  previewExerciseList: {
+    maxHeight: 280,
+  },
+  previewExerciseItem: {
+    padding: Spacing.md,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  previewExerciseTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  previewExerciseIndexBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewExerciseDetails: {
+    paddingLeft: 32,
+    gap: 2,
+  },
+  previewActions: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  startWorkoutModalBtn: {
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closePreviewBtn: {
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneTodayBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.xs,
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+  },
+  doneTodayMiniBadge: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 1,
+    borderRadius: Radius.xs,
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
   },
 });
