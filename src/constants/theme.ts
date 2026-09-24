@@ -112,5 +112,6 @@ export const Radius = {
   full: 9999,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/** @deprecated Use o hook `useTabBarHeight()` de `@/hooks/use-tab-bar-height` para padding dinâmico */
+export const BottomTabInset = 0;
 export const MaxContentWidth = 800;

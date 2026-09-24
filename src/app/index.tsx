@@ -5,14 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { WeeklyBar } from '@/components/weekly-bar';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { WorkoutSession } from '@/database/schema';
 import { workoutRepository } from '@/features/workouts/workout-repository';
+import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const tabBarHeight = useTabBarHeight();
   const activeWorkout = useActiveWorkoutStore((s) => s.activeWorkout);
   const startNewWorkout = useActiveWorkoutStore((s) => s.startNewWorkout);
   const initialize = useActiveWorkoutStore((s) => s.initialize);
@@ -53,7 +55,7 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xxxl }]}
           showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.header}>
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: BottomTabInset + Spacing.xxxl,
+    paddingBottom: Spacing.xxxl, // overridden inline with tabBarHeight
     gap: Spacing.lg,
   },
   header: {

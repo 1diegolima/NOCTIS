@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { Exercise, SplitType } from '@/database/schema';
 import { exerciseRepository } from '@/features/exercises/exercise-repository';
 import {
@@ -20,10 +20,12 @@ import {
   RoutineWorkoutWithExercises,
   routineRepository,
 } from '@/features/routines/routine-repository';
+import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function RoutinesScreen() {
   const theme = useTheme();
+  const tabBarHeight = useTabBarHeight();
 
   const [activeRoutine, setActiveRoutine] = useState<FullRoutine | null>(null);
   const [selectedWorkout, setSelectedWorkout] = useState<RoutineWorkoutWithExercises | null>(null);
@@ -116,7 +118,7 @@ export default function RoutinesScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xxxl }]}
           showsVerticalScrollIndicator={false}>
           {/* Top Bar */}
           <View style={styles.header}>
@@ -458,7 +460,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: BottomTabInset + Spacing.xxxl,
+    paddingBottom: Spacing.xxxl, // overridden inline with tabBarHeight
     gap: Spacing.lg,
     maxWidth: MaxContentWidth,
     alignSelf: 'center',

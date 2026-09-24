@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import {
   FullRoutine,
   RoutineWorkoutWithExercises,
@@ -26,11 +26,13 @@ import {
   PreparedSetSuggestion,
 } from '@/features/workouts/warmup-algorithm';
 import { workoutRepository, WorkoutWithSets } from '@/features/workouts/workout-repository';
+import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
 
 export default function WorkoutsScreen() {
   const theme = useTheme();
+  const tabBarHeight = useTabBarHeight();
 
   const {
     activeWorkout,
@@ -184,7 +186,7 @@ export default function WorkoutsScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <SafeAreaView edges={['top']} style={styles.safeArea}>
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xxxl }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled">
           {/* Header */}
@@ -606,7 +608,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: BottomTabInset + Spacing.xxxl,
+    paddingBottom: Spacing.xxxl, // overridden inline with tabBarHeight
     gap: Spacing.lg,
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
