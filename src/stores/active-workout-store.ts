@@ -5,15 +5,24 @@ import { exerciseRepository } from '@/features/exercises/exercise-repository';
 import { workoutRepository, WorkoutWithSets } from '@/features/workouts/workout-repository';
 
 interface ActiveWorkoutState {
+  /** Sessão de treino atualmente em execução (null se não há treino ativo) */
   activeWorkout: WorkoutWithSets | null;
-  exercisesList: Exercise[];
+  /** Exercício selecionado para registro de série */
   selectedExercise: Exercise | null;
+  /** Input de carga atual */
   weightInput: string;
+  /** Input de reps atual */
   repsInput: string;
 
   // Actions
+  /** Inicializa o store — tenta recuperar sessão ativa do banco */
   initialize: () => void;
-  startNewWorkout: (name?: string) => void;
+  /**
+   * Inicia uma nova sessão de treino.
+   * @param name - Nome da sessão
+   * @param routineWorkoutId - ID do routine_workout que originou a sessão
+   */
+  startNewWorkout: (name?: string, routineWorkoutId?: string) => void;
   selectExercise: (exercise: Exercise) => void;
   setWeightInput: (val: string) => void;
   setRepsInput: (val: string) => void;
@@ -25,26 +34,43 @@ interface ActiveWorkoutState {
 
 export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
   activeWorkout: null,
-  exercisesList: [],
   selectedExercise: null,
   weightInput: '',
   repsInput: '',
 
   initialize: () => {
-    const allExercises = exerciseRepository.getAll();
-    set({
-      exercisesList: allExercises,
-      selectedExercise: allExercises[0] ?? null,
-    });
+    // Tenta recuperar sessão em andamento (completedAt IS NULL) do banco
+    const allSessions = workoutRepository.getAll();
+    const inProgress = allSessions.find((s) => s.completedAt === null);
+
+    if (inProgress) {
+      const full = workoutRepository.getById(inProgress.id);
+      const allExercises = exerciseRepository.getAll();
+      // Restaurar exercício selecionado — usa o último exercício registrado ou o primeiro
+      const lastSet = full?.sets[full.sets.length - 1];
+      const lastExercise = lastSet
+        ? allExercises.find((e) => e.id === lastSet.exerciseId) ?? null
+        : null;
+
+      set({
+        activeWorkout: full,
+        selectedExercise: lastExercise ?? allExercises[0] ?? null,
+        weightInput: lastSet ? lastSet.weightKg.toString() : '',
+        repsInput: '',
+      });
+    } else {
+      set({ activeWorkout: null });
+    }
   },
 
-  startNewWorkout: (name) => {
+  startNewWorkout: (name?: string, routineWorkoutId?: string) => {
     const workoutId = `wk_${Date.now()}`;
-    const workoutName = name || `Treino #${new Date().toLocaleDateString('pt-BR')}`;
     const now = Date.now();
+    const workoutName = name || `Treino - ${new Date().toLocaleDateString('pt-BR')}`;
 
     workoutRepository.create({
       id: workoutId,
+      routineWorkoutId: routineWorkoutId ?? null,
       name: workoutName,
       startedAt: now,
       completedAt: null,
@@ -56,7 +82,6 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
 
     set({
       activeWorkout: created,
-      exercisesList: allExercises,
       selectedExercise: allExercises[0] ?? null,
       weightInput: '',
       repsInput: '',
@@ -77,7 +102,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
     const weight = parseFloat(weightInput.replace(',', '.'));
     const reps = parseInt(repsInput, 10);
 
-    if (isNaN(weight) || isNaN(reps) || reps <= 0) {
+    if (isNaN(weight) || isNaN(reps) || reps <= 0 || weight <= 0) {
       return false;
     }
 
@@ -127,6 +152,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       activeWorkout: null,
       weightInput: '',
       repsInput: '',
+      selectedExercise: null,
     });
   },
 
@@ -139,6 +165,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
       activeWorkout: null,
       weightInput: '',
       repsInput: '',
+      selectedExercise: null,
     });
   },
 }));

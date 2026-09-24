@@ -101,9 +101,7 @@ export const workoutRepository = {
   getWorkoutDaysThisWeek(): Set<number> {
     // Retorna os dias da semana (0=Dom, 1=Seg, ..., 6=Sáb) com treino concluído na semana atual
     const now = new Date();
-    // Início da semana: segunda-feira (ou domingo como primeiro dia)
     const dayOfWeek = now.getDay(); // 0=Dom, 1=Seg ...
-    // Calcular início da semana (segunda-feira)
     const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() + diff);
@@ -117,12 +115,57 @@ export const workoutRepository = {
       .from(workoutSessions)
       .where(gte(workoutSessions.startedAt, weekStart.getTime()))
       .all()
-      .filter((s) => s.startedAt < weekEnd.getTime());
+      .filter((s) => s.completedAt !== null && s.startedAt < weekEnd.getTime());
 
     const days = new Set<number>();
     for (const s of sessions) {
       days.add(new Date(s.startedAt).getDay());
     }
     return days;
+  },
+
+  /**
+   * Retorna o último registro de carga e repetições de um determinado exercício
+   */
+  getLastExercisePerformance(
+    exerciseId: string
+  ): { weightKg: number; reps: number; completedAt: number } | null {
+    const lastSet = db
+      .select({
+        weightKg: sessionSets.weightKg,
+        reps: sessionSets.reps,
+        completedAt: sessionSets.completedAt,
+      })
+      .from(sessionSets)
+      .where(eq(sessionSets.exerciseId, exerciseId))
+      .orderBy(desc(sessionSets.completedAt))
+      .limit(1)
+      .get();
+
+    return lastSet ?? null;
+  },
+
+  /**
+   * Retorna os IDs das sessões de rotina (routineWorkoutId) já concluídas hoje
+   */
+  getCompletedRoutineWorkoutIdsToday(): Set<string> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTimestamp = today.getTime();
+
+    const completed = db
+      .select()
+      .from(workoutSessions)
+      .where(gte(workoutSessions.startedAt, todayTimestamp))
+      .all()
+      .filter((s) => s.completedAt !== null && s.routineWorkoutId !== null);
+
+    const ids = new Set<string>();
+    for (const s of completed) {
+      if (s.routineWorkoutId) {
+        ids.add(s.routineWorkoutId);
+      }
+    }
+    return ids;
   },
 };
