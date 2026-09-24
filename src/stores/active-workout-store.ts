@@ -17,7 +17,7 @@ interface ActiveWorkoutState {
   selectExercise: (exercise: Exercise) => void;
   setWeightInput: (val: string) => void;
   setRepsInput: (val: string) => void;
-  logCurrentSet: () => boolean;
+  logCurrentSet: (type?: 'warmup' | 'feeder' | 'working') => boolean;
   deleteSet: (setId: string) => void;
   finishCurrentWorkout: () => void;
   cancelCurrentWorkout: () => void;
@@ -70,7 +70,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
   setWeightInput: (val) => set({ weightInput: val }),
   setRepsInput: (val) => set({ repsInput: val }),
 
-  logCurrentSet: () => {
+  logCurrentSet: (type = 'working') => {
     const { activeWorkout, selectedExercise, weightInput, repsInput } = get();
     if (!activeWorkout || !selectedExercise) return false;
 
@@ -90,20 +90,19 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>((set, get) => ({
 
     workoutRepository.addSet({
       id: setId,
-      workoutId: activeWorkout.id,
+      sessionId: activeWorkout.id,
       exerciseId: selectedExercise.id,
+      type,
       setNumber: newSetNumber,
       weightKg: weight,
       reps: reps,
-      rir: null,
+      isCompleted: 1,
       completedAt: Date.now(),
     });
 
-    // Refresh sets
     const updatedWorkout = workoutRepository.getById(activeWorkout.id);
     set({
       activeWorkout: updatedWorkout,
-      // Retém o peso para a próxima série para maior agilidade durante o treino
       repsInput: '',
     });
 

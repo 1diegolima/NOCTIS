@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { Workout } from '@/database/schema';
+import { WorkoutSession } from '@/database/schema';
 import { workoutRepository } from '@/features/workouts/workout-repository';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
@@ -17,7 +17,7 @@ export default function HomeScreen() {
   const initialize = useActiveWorkoutStore((s) => s.initialize);
 
   const [summary, setSummary] = useState({ workoutsCount: 0, setsCount: 0, totalTonnage: 0 });
-  const [recentWorkouts, setRecentWorkouts] = useState<Workout[]>([]);
+  const [recentWorkouts, setRecentWorkouts] = useState<WorkoutSession[]>([]);
 
   const loadDashboardData = useCallback(() => {
     try {
