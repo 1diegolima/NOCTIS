@@ -1,13 +1,48 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Workout } from '@/database/schema';
+import { workoutRepository } from '@/features/workouts/workout-repository';
 import { useTheme } from '@/hooks/use-theme';
+import { useActiveWorkoutStore } from '@/stores/active-workout-store';
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const activeWorkout = useActiveWorkoutStore((s) => s.activeWorkout);
+  const startNewWorkout = useActiveWorkoutStore((s) => s.startNewWorkout);
+  const initialize = useActiveWorkoutStore((s) => s.initialize);
+
+  const [summary, setSummary] = useState({ workoutsCount: 0, setsCount: 0, totalTonnage: 0 });
+  const [recentWorkouts, setRecentWorkouts] = useState<Workout[]>([]);
+
+  const loadDashboardData = useCallback(() => {
+    try {
+      initialize();
+      const weekly = workoutRepository.getWeeklySummary();
+      const all = workoutRepository.getAll();
+      setSummary(weekly);
+      setRecentWorkouts(all.slice(0, 5));
+    } catch (e) {
+      console.error('Erro ao carregar dados do painel:', e);
+    }
+  }, [initialize]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData();
+    }, [loadDashboardData])
+  );
+
+  const handleStartWorkout = () => {
+    if (!activeWorkout) {
+      startNewWorkout();
+    }
+    router.push('/explore');
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -28,33 +63,37 @@ export default function HomeScreen() {
             </ThemedText>
           </View>
 
-          {/* Card Principal: Iniciar Treino */}
+          {/* Card Principal: Treino */}
           <View
             style={[
               styles.mainCard,
               {
                 backgroundColor: theme.card,
-                borderColor: theme.cardBorder,
+                borderColor: activeWorkout ? theme.primary : theme.cardBorder,
               },
             ]}>
             <View style={styles.cardHeader}>
-              <ThemedText type="caption" style={{ color: theme.primary }}>
-                Sessão de Hoje
+              <ThemedText type="caption" style={{ color: activeWorkout ? theme.primary : theme.textSecondary }}>
+                {activeWorkout ? 'Treino em Andamento' : 'Sessão de Hoje'}
               </ThemedText>
-              <ThemedText type="caption">Sem treino ativo</ThemedText>
+              <ThemedText type="caption">
+                {activeWorkout ? `${activeWorkout.sets.length} séries registradas` : 'Pronto para iniciar'}
+              </ThemedText>
             </View>
 
             <View style={styles.cardBody}>
               <ThemedText type="title" style={styles.cardTitle}>
-                Pronto para treinar?
+                {activeWorkout ? activeWorkout.name : 'Iniciar Novo Treino'}
               </ThemedText>
               <ThemedText type="default" style={{ color: theme.textSecondary }}>
-                Registre suas séries, repetições e cargas com rapidez e precisão.
+                {activeWorkout
+                  ? 'Você possui uma sessão ativa. Continue registrando suas cargas e repetições.'
+                  : 'Registre suas séries, repetições e cargas com rapidez e precisão.'}
               </ThemedText>
             </View>
 
             <Pressable
-              onPress={() => router.push('/explore')}
+              onPress={handleStartWorkout}
               style={({ pressed }) => [
                 styles.actionButton,
                 {
@@ -63,7 +102,7 @@ export default function HomeScreen() {
                 },
               ]}>
               <ThemedText type="smallBold" style={styles.actionButtonText}>
-                Iniciar Novo Treino
+                {activeWorkout ? 'Continuar Treino Ativo →' : 'Iniciar Treino'}
               </ThemedText>
             </Pressable>
           </View>
@@ -81,7 +120,7 @@ export default function HomeScreen() {
               ]}>
               <ThemedText type="caption">Treinos</ThemedText>
               <ThemedText type="metricValue" style={{ marginTop: Spacing.xs }}>
-                0
+                {summary.workoutsCount}
               </ThemedText>
               <ThemedText type="small" style={{ color: theme.textMuted }}>
                 esta semana
@@ -95,7 +134,7 @@ export default function HomeScreen() {
               ]}>
               <ThemedText type="caption">Séries</ThemedText>
               <ThemedText type="metricValue" style={{ marginTop: Spacing.xs }}>
-                0
+                {summary.setsCount}
               </ThemedText>
               <ThemedText type="small" style={{ color: theme.textMuted }}>
                 concluídas
@@ -109,7 +148,7 @@ export default function HomeScreen() {
               ]}>
               <ThemedText type="caption">Volume</ThemedText>
               <ThemedText type="metricValue" style={{ marginTop: Spacing.xs }}>
-                0 <ThemedText type="small" style={{ color: theme.textMuted }}>kg</ThemedText>
+                {summary.totalTonnage} <ThemedText type="small" style={{ color: theme.textMuted }}>kg</ThemedText>
               </ThemedText>
               <ThemedText type="small" style={{ color: theme.textMuted }}>
                 acumulado
@@ -117,23 +156,46 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Treinos Recentes / Histórico Inicial */}
+          {/* Histórico Recente */}
           <View style={styles.sectionHeader}>
             <ThemedText type="subtitle">Últimos Treinos</ThemedText>
           </View>
 
-          <View
-            style={[
-              styles.emptyStateCard,
-              { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder },
-            ]}>
-            <ThemedText type="default" style={{ color: theme.textSecondary, textAlign: 'center' }}>
-              Nenhum treino registrado ainda.
-            </ThemedText>
-            <ThemedText type="small" style={{ color: theme.textMuted, textAlign: 'center', marginTop: 4 }}>
-              Seus treinos finalizados aparecerão aqui automaticamente.
-            </ThemedText>
-          </View>
+          {recentWorkouts.length === 0 ? (
+            <View
+              style={[
+                styles.emptyStateCard,
+                { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder },
+              ]}>
+              <ThemedText type="default" style={{ color: theme.textSecondary, textAlign: 'center' }}>
+                Nenhum treino registrado ainda.
+              </ThemedText>
+              <ThemedText type="small" style={{ color: theme.textMuted, textAlign: 'center', marginTop: 4 }}>
+                Seus treinos finalizados aparecerão aqui automaticamente.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.workoutList}>
+              {recentWorkouts.map((w) => (
+                <View
+                  key={w.id}
+                  style={[
+                    styles.workoutHistoryItem,
+                    { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                  ]}>
+                  <View style={styles.historyItemTop}>
+                    <ThemedText type="smallBold">{w.name}</ThemedText>
+                    <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                      {new Date(w.startedAt).toLocaleDateString('pt-BR')}
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                    {w.completedAt ? 'Concluído' : 'Em andamento'}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -221,5 +283,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  workoutList: {
+    gap: Spacing.sm,
+  },
+  workoutHistoryItem: {
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+  },
+  historyItemTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });
