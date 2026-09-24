@@ -56,6 +56,7 @@ export default function WorkoutsScreen() {
   const [previewWorkout, setPreviewWorkout] = useState<RoutineWorkoutWithExercises | null>(null);
   const [completedTodayIds, setCompletedTodayIds] = useState<Set<string>>(new Set());
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [finishedDurationMinutes, setFinishedDurationMinutes] = useState(1);
 
   // Timer de Descanso
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -189,6 +190,8 @@ export default function WorkoutsScreen() {
       Alert.alert('Atenção', 'Registre ao menos uma série antes de finalizar o treino.');
       return;
     }
+    const duration = Math.max(1, Math.round((Date.now() - activeWorkout.startedAt) / 60000));
+    setFinishedDurationMinutes(duration);
     setShowFinishModal(true);
   };
 
@@ -883,7 +886,7 @@ export default function WorkoutsScreen() {
                       DURAÇÃO
                     </ThemedText>
                     <ThemedText type="title" style={{ color: theme.primary }}>
-                      {Math.max(1, Math.round((Date.now() - activeWorkout.startedAt) / 60000))} min
+                      {finishedDurationMinutes} min
                     </ThemedText>
                   </View>
 
