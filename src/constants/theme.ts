@@ -1,6 +1,7 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * NOCTIS Design System
+ * Aesthetic: Gothic / Batcave Dark Minimalist (Deep Blacks, Gunmetal, Blood Red Accent)
+ * Tone: Direct, clean, elegant, focused.
  */
 
 import '@/global.css';
@@ -8,33 +9,74 @@ import '@/global.css';
 import { Platform } from 'react-native';
 
 export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    // Backgrounds
+    background: '#09090B',
+    backgroundElevated: '#121215',
+    card: '#18181B',
+    cardElevated: '#222226',
+    cardBorder: '#27272A',
+    cardBorderHighlight: '#3F3F46',
+
+    // Text & Content
+    text: '#FAFAFA',
+    textSecondary: '#A1A1AA',
+    textMuted: '#71717A',
+
+    // Accent - Blood Red / Crimson
+    primary: '#DC2626',
+    primaryHover: '#EF4444',
+    primaryMuted: '#7F1D1D',
+    primaryDark: '#450A0A',
+    primaryGlow: 'rgba(220, 38, 38, 0.12)',
+
+    // Status
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#DC2626',
+
+    // Tab Bar / Navigation
+    tabBarBackground: '#09090B',
+    tabBarBorder: '#27272A',
+    tabBarActive: '#DC2626',
+    tabBarInactive: '#71717A',
+  },
+  light: {
+    background: '#09090B',
+    backgroundElevated: '#121215',
+    card: '#18181B',
+    cardElevated: '#222226',
+    cardBorder: '#27272A',
+    cardBorderHighlight: '#3F3F46',
+
+    text: '#FAFAFA',
+    textSecondary: '#A1A1AA',
+    textMuted: '#71717A',
+
+    primary: '#DC2626',
+    primaryHover: '#EF4444',
+    primaryMuted: '#7F1D1D',
+    primaryDark: '#450A0A',
+    primaryGlow: 'rgba(220, 38, 38, 0.12)',
+
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#DC2626',
+
+    tabBarBackground: '#09090B',
+    tabBarBorder: '#27272A',
+    tabBarActive: '#DC2626',
+    tabBarInactive: '#71717A',
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor = keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -52,13 +94,22 @@ export const Fonts = Platform.select({
 });
 
 export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+  huge: 48,
+} as const;
+
+export const Radius = {
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  full: 9999,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
