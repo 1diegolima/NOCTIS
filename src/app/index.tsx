@@ -7,6 +7,10 @@ import { ThemedText } from '@/components/themed-text';
 import { WeeklyBar } from '@/components/weekly-bar';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { WorkoutSession } from '@/database/schema';
+import {
+  RoutineWorkoutWithExercises,
+  routineRepository,
+} from '@/features/routines/routine-repository';
 import { workoutRepository } from '@/features/workouts/workout-repository';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
@@ -16,12 +20,13 @@ export default function HomeScreen() {
   const theme = useTheme();
   const tabBarHeight = useTabBarHeight();
   const activeWorkout = useActiveWorkoutStore((s) => s.activeWorkout);
-  const startNewWorkout = useActiveWorkoutStore((s) => s.startNewWorkout);
   const initialize = useActiveWorkoutStore((s) => s.initialize);
 
   const [summary, setSummary] = useState({ workoutsCount: 0, setsCount: 0, totalTonnage: 0 });
   const [recentWorkouts, setRecentWorkouts] = useState<WorkoutSession[]>([]);
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+  const [suggestedSession, setSuggestedSession] =
+    useState<RoutineWorkoutWithExercises | null>(null);
   const todayJsDay = new Date().getDay();
 
   const loadDashboardData = useCallback(() => {
@@ -30,9 +35,18 @@ export default function HomeScreen() {
       const weekly = workoutRepository.getWeeklySummary();
       const all = workoutRepository.getAll();
       const days = workoutRepository.getWorkoutDaysThisWeek();
+      const routine = routineRepository.getActiveRoutine();
+
       setSummary(weekly);
       setRecentWorkouts(all.slice(0, 5));
       setCompletedDays(days);
+
+      if (routine && routine.workouts.length > 0) {
+        const suggested = routine.workouts[weekly.workoutsCount % routine.workouts.length];
+        setSuggestedSession(suggested);
+      } else {
+        setSuggestedSession(null);
+      }
     } catch (e) {
       console.error('Erro ao carregar dados do painel:', e);
     }
@@ -45,9 +59,6 @@ export default function HomeScreen() {
   );
 
   const handleStartWorkout = () => {
-    if (!activeWorkout) {
-      startNewWorkout();
-    }
     router.push('/explore');
   };
 
@@ -97,22 +108,41 @@ export default function HomeScreen() {
               },
             ]}>
             <View style={styles.cardHeader}>
-              <ThemedText type="caption" style={{ color: activeWorkout ? theme.primary : theme.textSecondary }}>
-                {activeWorkout ? 'Treino em Andamento' : 'Sessão de Hoje'}
+              <ThemedText
+                type="caption"
+                style={{ color: activeWorkout ? theme.primary : theme.textSecondary }}>
+                {activeWorkout
+                  ? 'TREINO EM ANDAMENTO'
+                  : suggestedSession
+                  ? 'SESSÃO SUGERIDA'
+                  : 'SESSÃO DE HOJE'}
               </ThemedText>
               <ThemedText type="caption">
-                {activeWorkout ? `${activeWorkout.sets.length} séries registradas` : 'Pronto para iniciar'}
+                {activeWorkout
+                  ? `${activeWorkout.sets.length} séries registradas`
+                  : completedDays.has(todayJsDay)
+                  ? '✓ Concluído hoje'
+                  : 'Pronto para iniciar'}
               </ThemedText>
             </View>
 
             <View style={styles.cardBody}>
               <ThemedText type="title" style={styles.cardTitle}>
-                {activeWorkout ? activeWorkout.name : 'Iniciar Novo Treino'}
+                {activeWorkout
+                  ? activeWorkout.name
+                  : suggestedSession
+                  ? suggestedSession.name
+                  : 'Iniciar Novo Treino'}
               </ThemedText>
               <ThemedText type="default" style={{ color: theme.textSecondary }}>
                 {activeWorkout
-                  ? 'Você possui uma sessão ativa. Continue registrando suas cargas e repetições.'
-                  : 'Registre suas séries, repetições e cargas com rapidez e precisão.'}
+                  ? 'Você possui uma sessão ativa em execução. Continue registrando suas cargas e repetições.'
+                  : suggestedSession
+                  ? `${suggestedSession.exercises.length} exercícios programados • ${suggestedSession.exercises
+                      .map((e) => e.exercise?.name)
+                      .slice(0, 3)
+                      .join(', ')}${suggestedSession.exercises.length > 3 ? '...' : ''}`
+                  : 'Registre suas séries, repetições e cargas com rapidez e precisão tática.'}
               </ThemedText>
             </View>
 
@@ -126,7 +156,11 @@ export default function HomeScreen() {
                 },
               ]}>
               <ThemedText type="smallBold" style={styles.actionButtonText}>
-                {activeWorkout ? 'Continuar Treino Ativo →' : 'Iniciar Treino'}
+                {activeWorkout
+                  ? 'Continuar Treino Ativo →'
+                  : completedDays.has(todayJsDay)
+                  ? 'Ver Treino de Hoje →'
+                  : 'Ver Treino & Iniciar →'}
               </ThemedText>
             </Pressable>
           </View>
