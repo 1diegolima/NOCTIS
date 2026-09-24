@@ -40,12 +40,16 @@ export default function RoutinesScreen() {
   const [weightInput, setWeightInput] = useState('80');
 
   const loadRoutineData = useCallback(() => {
-    const routine = routineRepository.getActiveRoutine();
-    setActiveRoutine(routine);
-    if (routine && routine.workouts.length > 0) {
-      setSelectedWorkout(routine.workouts[0]);
+    try {
+      const routine = routineRepository.getActiveRoutine();
+      setActiveRoutine(routine);
+      if (routine && routine.workouts.length > 0) {
+        setSelectedWorkout(routine.workouts[0]);
+      }
+      setAllExercises(exerciseRepository.getAll());
+    } catch (e) {
+      console.error('Erro ao carregar dados de rotina:', e);
     }
-    setAllExercises(exerciseRepository.getAll());
   }, []);
 
   useFocusEffect(
