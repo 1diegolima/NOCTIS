@@ -32,6 +32,7 @@ export default function RoutinesScreen() {
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const [exerciseSearchMuscle, setExerciseSearchMuscle] = useState<string>('Todos');
+  const [exerciseSearchText, setExerciseSearchText] = useState<string>('');
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
 
   // Form para adicionar exercício
@@ -110,9 +111,15 @@ export default function RoutinesScreen() {
 
   const muscles = ['Todos', 'Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilhas', 'Abdômen'];
 
-  const filteredExercises = allExercises.filter((e) =>
-    exerciseSearchMuscle === 'Todos' ? true : e.muscleGroup === exerciseSearchMuscle
-  );
+  const filteredExercises = allExercises.filter((e) => {
+    const matchMuscle =
+      exerciseSearchMuscle === 'Todos' ||
+      e.muscleGroup.toLowerCase() === exerciseSearchMuscle.toLowerCase();
+    const matchText =
+      !exerciseSearchText.trim() ||
+      e.name.toLowerCase().includes(exerciseSearchText.trim().toLowerCase());
+    return matchMuscle && matchText;
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -332,6 +339,18 @@ export default function RoutinesScreen() {
             <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.xs }}>
               Selecione o exercício e defina os parâmetros:
             </ThemedText>
+
+            {/* Campo de Busca por Nome */}
+            <TextInput
+              value={exerciseSearchText}
+              onChangeText={setExerciseSearchText}
+              placeholder="Buscar por nome (ex: Supino, Puxada)..."
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.exerciseSearchInput,
+                { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text },
+              ]}
+            />
 
             {/* Filtro Muscular */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalMuscleScroll}>
@@ -589,8 +608,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginRight: Spacing.xs,
   },
+  exerciseSearchInput: {
+    height: 42,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.sm,
+    fontSize: 14,
+    marginBottom: Spacing.xs,
+  },
   exercisePickList: {
-    maxHeight: 200,
+    maxHeight: 250,
   },
   exercisePickItem: {
     padding: Spacing.sm,

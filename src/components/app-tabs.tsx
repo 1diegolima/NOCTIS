@@ -18,23 +18,26 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Início</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
+          sf="house.fill"
           src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Treino</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Treinar</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
+          sf="dumbbell.fill"
           src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="routines">
-        <NativeTabs.Trigger.Label>Montar Treino</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Rotinas</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
+          sf="list.bullet.rectangle.portrait.fill"
+          src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
