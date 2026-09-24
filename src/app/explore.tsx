@@ -49,6 +49,7 @@ export default function WorkoutsScreen() {
   const [activeRoutine, setActiveRoutine] = useState<FullRoutine | null>(null);
   const [history, setHistory] = useState<WorkoutWithSets[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [weeklyWorkoutsCount, setWeeklyWorkoutsCount] = useState(0);
 
   // Timer de Descanso
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -70,6 +71,9 @@ export default function WorkoutsScreen() {
     const all = workoutRepository.getAll();
     const full = all.map((w) => workoutRepository.getById(w.id)).filter(Boolean) as WorkoutWithSets[];
     setHistory(full);
+    // Contar treinos desta semana para calcular sessão sugerida
+    const summary = workoutRepository.getWeeklySummary();
+    setWeeklyWorkoutsCount(summary.workoutsCount);
   }, [initialize]);
 
   useFocusEffect(
@@ -77,6 +81,11 @@ export default function WorkoutsScreen() {
       loadData();
     }, [loadData])
   );
+
+  // Sessão sugerida: rotação circular baseada em treinos feitos na semana
+  const suggestedWorkoutIndex = activeRoutine
+    ? weeklyWorkoutsCount % activeRoutine.workouts.length
+    : 0;
 
   // Exercícios da sessão ativa
   const currentWorkoutFromRoutine = activeRoutine?.workouts[0] ?? null;
@@ -460,40 +469,73 @@ export default function WorkoutsScreen() {
               {activeRoutine ? (
                 <View style={styles.routinePickSection}>
                   <View style={styles.sectionHeader}>
-                    <ThemedText type="subtitle">Iniciar Sessão de Hoje</ThemedText>
+                    <ThemedText type="subtitle">Sessão de Hoje</ThemedText>
                   </View>
 
-                  <View style={styles.workoutsGrid}>
-                    {activeRoutine.workouts.map((rw) => (
-                      <Pressable
-                        key={rw.id}
-                        onPress={() => handleStartRoutineWorkout(rw)}
-                        style={[
-                          styles.workoutPickCard,
-                          { backgroundColor: theme.card, borderColor: theme.cardBorder },
-                        ]}>
-                        <View style={styles.workoutPickTop}>
-                          <ThemedText type="title">{rw.name}</ThemedText>
-                          <ThemedText type="caption" style={{ color: theme.primary }}>
-                            {rw.exercises.length} exercícios
-                          </ThemedText>
-                        </View>
-                        <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs }}>
-                          {rw.exercises.map((e) => e.exercise?.name).slice(0, 3).join(', ')}
-                          {rw.exercises.length > 3 ? '...' : ''}
+                  {/* Sessão Sugerida */}
+                  {activeRoutine.workouts[suggestedWorkoutIndex] && (
+                    <Pressable
+                      onPress={() => handleStartRoutineWorkout(activeRoutine.workouts[suggestedWorkoutIndex])}
+                      style={[
+                        styles.suggestedCard,
+                        { backgroundColor: theme.primaryDark, borderColor: theme.primary },
+                      ]}>
+                      <View style={styles.suggestedBadge}>
+                        <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                          SUGERIDA PARA HOJE
                         </ThemedText>
-                        <View
-                          style={[
-                            styles.startChip,
-                            { backgroundColor: theme.primaryDark, borderColor: theme.primary },
-                          ]}>
-                          <ThemedText type="smallBold" style={{ color: theme.primaryHover }}>
-                            Iniciar Sessão →
-                          </ThemedText>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
+                      </View>
+                      <View style={styles.workoutPickTop}>
+                        <ThemedText type="title" style={{ color: '#FFFFFF' }}>
+                          {activeRoutine.workouts[suggestedWorkoutIndex].name}
+                        </ThemedText>
+                        <ThemedText type="caption" style={{ color: theme.primaryHover }}>
+                          {activeRoutine.workouts[suggestedWorkoutIndex].exercises.length} exercícios
+                        </ThemedText>
+                      </View>
+                      <ThemedText type="small" style={{ color: theme.primaryHover, opacity: 0.8 }}>
+                        {activeRoutine.workouts[suggestedWorkoutIndex].exercises
+                          .map((e) => e.exercise?.name)
+                          .slice(0, 3)
+                          .join(', ')}
+                        {activeRoutine.workouts[suggestedWorkoutIndex].exercises.length > 3 ? '...' : ''}
+                      </ThemedText>
+                      <View style={[styles.startChip, { backgroundColor: theme.primary, borderColor: theme.primaryHover }]}>
+                        <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                          Iniciar Agora →
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  )}
+
+                  {/* Outras Sessões */}
+                  {activeRoutine.workouts.length > 1 && (
+                    <>
+                      <ThemedText type="caption" style={{ color: theme.textMuted, marginTop: Spacing.xs }}>
+                        OUTRAS SESSÕES
+                      </ThemedText>
+                      <View style={styles.workoutsGrid}>
+                        {activeRoutine.workouts
+                          .filter((_, idx) => idx !== suggestedWorkoutIndex)
+                          .map((rw) => (
+                          <Pressable
+                            key={rw.id}
+                            onPress={() => handleStartRoutineWorkout(rw)}
+                            style={[
+                              styles.workoutPickCard,
+                              { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                            ]}>
+                            <View style={styles.workoutPickTop}>
+                              <ThemedText type="smallBold">{rw.name}</ThemedText>
+                              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                                {rw.exercises.length} ex.
+                              </ThemedText>
+                            </View>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </>
+                  )}
                 </View>
               ) : (
                 <View
@@ -716,10 +758,23 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   workoutPickCard: {
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
     gap: Spacing.xs,
+  },
+  suggestedCard: {
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    gap: Spacing.sm,
+  },
+  suggestedBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.xs,
+    backgroundColor: 'rgba(220,38,38,0.25)',
   },
   workoutPickTop: {
     flexDirection: 'row',
