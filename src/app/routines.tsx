@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ExerciseSelectorModal } from '@/components/exercise-selector-modal';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { Exercise, SplitType } from '@/database/schema';
@@ -146,8 +147,8 @@ export default function RoutinesScreen() {
   });
 
   return (
-    <Pressable style={[styles.container, { backgroundColor: theme.background }]} onPress={Keyboard.dismiss} accessible={false}>
-        <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
@@ -393,212 +394,124 @@ export default function RoutinesScreen() {
           </View>
         </Modal>
 
-        {/* MODAL 2: ADICIONAR EXERCÍCIO AO TREINO */}
-        <Modal
+        {/* OVERLAY: SELETOR AVANÇADO DE EXERCÍCIOS */}
+        <ExerciseSelectorModal
           visible={showAddExerciseModal}
-          transparent
-          animationType="slide"
-          onRequestClose={() => {
-            Keyboard.dismiss();
-            setShowAddExerciseModal(false);
-          }}>
-          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss} accessible={false}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={{ width: '100%' }}>
-                <View
-                  style={[
-                    styles.modalContentBig,
-                    { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder },
-                  ]}>
-                  <View style={styles.modalHeaderRow}>
-                    <ThemedText type="title">Adicionar Exercício</ThemedText>
-                    <Pressable
-                      onPress={() => {
-                        Keyboard.dismiss();
-                        setShowAddExerciseModal(false);
-                      }}
-                      hitSlop={12}>
-                      <ThemedText type="title" style={{ color: theme.textSecondary }}>✕</ThemedText>
-                    </Pressable>
+          onClose={() => setShowAddExerciseModal(false)}
+          onSelectExercise={(ex) => {
+            setSelectedExerciseToAdd(ex);
+          }}
+          excludeExerciseIds={selectedWorkout?.exercises.map((e) => e.exerciseId) || []}
+          title={`Adicionar ao ${selectedWorkout?.name || 'Treino'}`}
+        />
+
+        {/* OVERLAY: CONFIGURAR PARÂMETROS DO EXERCÍCIO ADICIONADO */}
+        {selectedExerciseToAdd && (
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ width: '100%' }}>
+              <View
+                style={[
+                  styles.modalContent,
+                  { backgroundColor: theme.cardElevated, borderColor: theme.primary },
+                ]}>
+                <View style={styles.modalHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                      PARÂMETROS DE TRABALHO
+                    </ThemedText>
+                    <ThemedText type="title">{selectedExerciseToAdd.name}</ThemedText>
+                  </View>
+                  <Pressable
+                    onPress={() => setSelectedExerciseToAdd(null)}
+                    hitSlop={12}>
+                    <ThemedText type="title" style={{ color: theme.textSecondary }}>✕</ThemedText>
+                  </Pressable>
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={styles.formGroup}>
+                    <ThemedText type="caption">Séries</ThemedText>
+                    <TextInput
+                      value={workingSetsInput}
+                      onChangeText={setWorkingSetsInput}
+                      keyboardType="number-pad"
+                      style={[
+                        styles.formInput,
+                        {
+                          backgroundColor: theme.backgroundElevated,
+                          borderColor: theme.cardBorder,
+                          color: theme.text,
+                        },
+                      ]}
+                    />
                   </View>
 
-                  {/* Filtro por Grupo Muscular */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.modalMuscleScroll}>
-                    {muscles.map((m) => {
-                      const isSel = exerciseSearchMuscle === m;
-                      return (
-                        <Pressable
-                          key={m}
-                          onPress={() => {
-                            haptics.light();
-                            setExerciseSearchMuscle(m);
-                          }}
-                          style={[
-                            styles.muscleChipSmall,
-                            {
-                              backgroundColor: isSel ? theme.primary : theme.backgroundElevated,
-                              borderColor: isSel ? theme.primary : theme.cardBorder,
-                            },
-                          ]}>
-                          <ThemedText
-                            type="caption"
-                            style={{ color: isSel ? '#FFFFFF' : theme.textSecondary }}>
-                            {m}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Busca por Nome */}
-                  <TextInput
-                    value={exerciseSearchText}
-                    onChangeText={setExerciseSearchText}
-                    placeholder="Buscar exercício pelo nome..."
-                    placeholderTextColor={theme.textMuted}
-                    style={[
-                      styles.exerciseSearchInput,
-                      {
-                        backgroundColor: theme.backgroundElevated,
-                        borderColor: theme.cardBorder,
-                        color: theme.text,
-                      },
-                    ]}
-                  />
-
-                  {/* Lista de Exercícios Disponíveis */}
-                  <ScrollView
-                    style={styles.exercisePickList}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled">
-                    {filteredExercises.map((e) => {
-                      const isSelected = selectedExerciseToAdd?.id === e.id;
-                      return (
-                        <Pressable
-                          key={e.id}
-                          onPress={() => {
-                            haptics.light();
-                            setSelectedExerciseToAdd(e);
-                          }}
-                          style={[
-                            styles.exercisePickItem,
-                            {
-                              backgroundColor: isSelected ? theme.primaryMuted : theme.card,
-                              borderColor: isSelected ? theme.primary : theme.cardBorder,
-                            },
-                          ]}>
-                          <ThemedText
-                            type="smallBold"
-                            style={{ color: isSelected ? '#FFFFFF' : theme.text }}>
-                            {e.name}
-                          </ThemedText>
-                          <ThemedText type="caption" style={{ color: theme.textMuted }}>
-                            {e.muscleGroup} • {e.equipment}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Configurações do Exercício Selecionado */}
-                  {selectedExerciseToAdd && (
-                    <View
+                  <View style={styles.formGroup}>
+                    <ThemedText type="caption">Reps Mín</ThemedText>
+                    <TextInput
+                      value={repsMinInput}
+                      onChangeText={setRepsMinInput}
+                      keyboardType="number-pad"
                       style={[
-                        styles.formConfigBox,
-                        { backgroundColor: theme.card, borderColor: theme.primary },
-                      ]}>
-                      <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
-                        CONFIGURAÇÃO DE TRABALHO
-                      </ThemedText>
+                        styles.formInput,
+                        {
+                          backgroundColor: theme.backgroundElevated,
+                          borderColor: theme.cardBorder,
+                          color: theme.text,
+                        },
+                      ]}
+                    />
+                  </View>
 
-                      <View style={styles.formRow}>
-                        <View style={styles.formGroup}>
-                          <ThemedText type="caption">Séries Válidas</ThemedText>
-                          <TextInput
-                            value={workingSetsInput}
-                            onChangeText={setWorkingSetsInput}
-                            keyboardType="number-pad"
-                            style={[
-                              styles.formInput,
-                              {
-                                backgroundColor: theme.backgroundElevated,
-                                borderColor: theme.cardBorder,
-                                color: theme.text,
-                              },
-                            ]}
-                          />
-                        </View>
+                  <View style={styles.formGroup}>
+                    <ThemedText type="caption">Reps Máx</ThemedText>
+                    <TextInput
+                      value={repsMaxInput}
+                      onChangeText={setRepsMaxInput}
+                      keyboardType="number-pad"
+                      style={[
+                        styles.formInput,
+                        {
+                          backgroundColor: theme.backgroundElevated,
+                          borderColor: theme.cardBorder,
+                          color: theme.text,
+                        },
+                      ]}
+                    />
+                  </View>
 
-                        <View style={styles.formGroup}>
-                          <ThemedText type="caption">Reps Mín</ThemedText>
-                          <TextInput
-                            value={repsMinInput}
-                            onChangeText={setRepsMinInput}
-                            keyboardType="number-pad"
-                            style={[
-                              styles.formInput,
-                              {
-                                backgroundColor: theme.backgroundElevated,
-                                borderColor: theme.cardBorder,
-                                color: theme.text,
-                              },
-                            ]}
-                          />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                          <ThemedText type="caption">Reps Máx</ThemedText>
-                          <TextInput
-                            value={repsMaxInput}
-                            onChangeText={setRepsMaxInput}
-                            keyboardType="number-pad"
-                            style={[
-                              styles.formInput,
-                              {
-                                backgroundColor: theme.backgroundElevated,
-                                borderColor: theme.cardBorder,
-                                color: theme.text,
-                              },
-                            ]}
-                          />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                          <ThemedText type="caption">Carga Alvo (kg)</ThemedText>
-                          <TextInput
-                            value={weightInput}
-                            onChangeText={setWeightInput}
-                            keyboardType="numeric"
-                            style={[
-                              styles.formInput,
-                              {
-                                backgroundColor: theme.backgroundElevated,
-                                borderColor: theme.cardBorder,
-                                color: theme.text,
-                              },
-                            ]}
-                          />
-                        </View>
-                      </View>
-
-                      <Pressable
-                        onPress={handleAddExerciseToWorkout}
-                        style={[styles.confirmAddBtn, { backgroundColor: theme.primary }]}>
-                        <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                          Confirmar Exercício no Treino
-                        </ThemedText>
-                      </Pressable>
-                    </View>
-                  )}
+                  <View style={styles.formGroup}>
+                    <ThemedText type="caption">Carga (kg)</ThemedText>
+                    <TextInput
+                      value={weightInput}
+                      onChangeText={setWeightInput}
+                      keyboardType="numeric"
+                      style={[
+                        styles.formInput,
+                        {
+                          backgroundColor: theme.backgroundElevated,
+                          borderColor: theme.cardBorder,
+                          color: theme.text,
+                        },
+                      ]}
+                    />
+                  </View>
                 </View>
-              </KeyboardAvoidingView>
-          </Pressable>
-        </Modal>
-    </Pressable>
+
+                <Pressable
+                  onPress={handleAddExerciseToWorkout}
+                  style={[styles.confirmAddBtn, { backgroundColor: theme.primary, marginTop: Spacing.sm }]}>
+                  <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                    Confirmar Exercício na Rotina
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        )}
+      </View>
   );
 }
 
