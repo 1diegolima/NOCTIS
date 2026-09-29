@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { PlateCalculatorModal } from '@/components/plate-calculator-modal';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import {
   FullRoutine,
@@ -24,10 +26,11 @@ import {
   calculatePreparationSets,
   PreparedSetSuggestion,
 } from '@/features/workouts/warmup-algorithm';
-import { workoutRepository, WorkoutWithSets } from '@/features/workouts/workout-repository';
+import { workoutRepository, WorkoutWithSets, calculateOneRepMax } from '@/features/workouts/workout-repository';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
+import { haptics } from '@/utils/haptics';
 
 export default function WorkoutsScreen() {
   const theme = useTheme();
@@ -55,6 +58,7 @@ export default function WorkoutsScreen() {
   const [completedTodayIds, setCompletedTodayIds] = useState<Set<string>>(new Set());
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishedDurationMinutes, setFinishedDurationMinutes] = useState(1);
+  const [showPlateCalcModal, setShowPlateCalcModal] = useState(false);
 
   // Timer de Descanso
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -63,7 +67,15 @@ export default function WorkoutsScreen() {
     let interval: any = null;
     if (restTimer !== null && restTimer > 0) {
       interval = setInterval(() => {
-        setRestTimer((prev) => (prev !== null && prev > 1 ? prev - 1 : null));
+        setRestTimer((prev) => {
+          if (prev !== null && prev > 1) {
+            return prev - 1;
+          }
+          if (prev === 1) {
+            haptics.timerDone();
+          }
+          return null;
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -125,6 +137,7 @@ export default function WorkoutsScreen() {
     : [];
 
   const handleStartRoutineWorkout = (rw: RoutineWorkoutWithExercises) => {
+    haptics.medium();
     startNewWorkout(rw.name, rw.id);
     setPreviewWorkout(null);
     setCurrentExerciseIndex(0);
@@ -138,6 +151,7 @@ export default function WorkoutsScreen() {
   };
 
   const handleSelectExerciseByOrder = (idx: number) => {
+    haptics.light();
     setCurrentExerciseIndex(idx);
     const target = activeExerciseList[idx];
     if (target && target.exercise) {
@@ -147,19 +161,26 @@ export default function WorkoutsScreen() {
     }
   };
 
-  // Último registro histórico do exercício atual
-  const currentExerciseLastPerf = currentExercise
-    ? workoutRepository.getLastExercisePerformance(currentExercise.id)
+  // Séries completas da última sessão deste exercício (Ghost Sets)
+  const currentExerciseLastSessionSets = currentExercise
+    ? workoutRepository.getLastSessionSetsForExercise(currentExercise.id, activeWorkout?.id)
+    : [];
+
+  // Recorde Pessoal (PR) do exercício
+  const currentExercisePR = currentExercise
+    ? workoutRepository.getExercisePR(currentExercise.id)
     : null;
 
   // Ajustes rápidos de carga e repetições (+/-)
   const adjustWeight = (delta: number) => {
+    haptics.light();
     const current = parseFloat(weightInput.replace(',', '.')) || 0;
     const next = Math.max(0, current + delta);
     setWeightInput(next.toString());
   };
 
   const adjustReps = (delta: number) => {
+    haptics.light();
     const current = parseInt(repsInput, 10) || 0;
     const next = Math.max(0, current + delta);
     setRepsInput(next.toString());
@@ -168,6 +189,7 @@ export default function WorkoutsScreen() {
   const handleLogWorkingSet = () => {
     const success = logCurrentSet();
     if (success) {
+      haptics.success();
       // Inicia timer de descanso (120 segundos por padrão)
       setRestTimer(currentRoutineExercise?.restSeconds || 120);
     } else {
@@ -177,10 +199,16 @@ export default function WorkoutsScreen() {
 
   const handleLogFeederSet = (suggestion: PreparedSetSuggestion) => {
     if (!currentExercise || !activeWorkout) return;
+    haptics.medium();
     setWeightInput(suggestion.weightKg.toString());
     setRepsInput(suggestion.reps.toString());
     logCurrentSet();
     setRestTimer(60); // Descanso menor para feeder sets
+  };
+
+  const handleDeleteLoggedSet = (setId: string) => {
+    haptics.light();
+    deleteSet(setId);
   };
 
   const handleFinish = () => {
@@ -188,12 +216,14 @@ export default function WorkoutsScreen() {
       Alert.alert('Atenção', 'Registre ao menos uma série antes de finalizar o treino.');
       return;
     }
+    haptics.medium();
     const duration = Math.max(1, Math.round((Date.now() - activeWorkout.startedAt) / 60000));
     setFinishedDurationMinutes(duration);
     setShowFinishModal(true);
   };
 
   const handleConfirmFinish = () => {
+    haptics.heavy();
     finishCurrentWorkout();
     setShowFinishModal(false);
     setRestTimer(null);
@@ -207,6 +237,7 @@ export default function WorkoutsScreen() {
         text: 'Descartar',
         style: 'destructive',
         onPress: () => {
+          haptics.medium();
           cancelCurrentWorkout();
           setRestTimer(null);
           loadData();
@@ -219,7 +250,8 @@ export default function WorkoutsScreen() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
+        <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[
@@ -260,14 +292,30 @@ export default function WorkoutsScreen() {
               </View>
               <View style={{ flexDirection: 'row', gap: Spacing.xs, alignItems: 'center' }}>
                 <Pressable
-                  onPress={() => setRestTimer((prev) => (prev !== null ? prev + 30 : 30))}
+                  onPress={() => {
+                    haptics.light();
+                    setRestTimer((prev) => Math.max(0, (prev !== null ? prev - 15 : 0)));
+                  }}
+                  style={[styles.skipTimerBtn, { backgroundColor: theme.cardElevated }]}>
+                  <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
+                    -15s
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    haptics.light();
+                    setRestTimer((prev) => (prev !== null ? prev + 30 : 30));
+                  }}
                   style={[styles.skipTimerBtn, { backgroundColor: theme.cardElevated }]}>
                   <ThemedText type="smallBold" style={{ color: theme.primaryHover }}>
                     +30s
                   </ThemedText>
                 </Pressable>
                 <Pressable
-                  onPress={() => setRestTimer(null)}
+                  onPress={() => {
+                    haptics.light();
+                    setRestTimer(null);
+                  }}
                   style={[styles.skipTimerBtn, { backgroundColor: theme.cardElevated }]}>
                   <ThemedText type="smallBold" style={{ color: theme.text }}>
                     Pular ➔
@@ -331,20 +379,22 @@ export default function WorkoutsScreen() {
                             borderWidth: isSelected ? 2 : 1,
                           },
                         ]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, overflow: 'hidden' }}>
                           <ThemedText
                             type="smallBold"
-                            style={{ color: isSelected ? theme.primary : theme.text }}>
+                            numberOfLines={1}
+                            style={{ color: isSelected ? theme.primary : theme.text, flex: 1 }}>
                             #{idx + 1} {re.exercise?.name}
                           </ThemedText>
                           {isCompleted && (
-                            <ThemedText type="caption" style={{ color: '#22c55e', fontWeight: '700' }}>
+                            <ThemedText type="caption" style={{ color: '#22c55e', fontWeight: '700', flexShrink: 0 }}>
                               ✓
                             </ThemedText>
                           )}
                         </View>
                         <ThemedText
                           type="caption"
+                          numberOfLines={1}
                           style={{ color: isCompleted ? '#22c55e' : theme.textMuted }}>
                           {setsDoneForThisEx}/{re.workingSets} válidas ({re.workingWeightKg}kg)
                         </ThemedText>
@@ -453,24 +503,59 @@ export default function WorkoutsScreen() {
                       <ThemedText type="smallBold" style={{ color: theme.primary }}>
                         REGISTRAR SÉRIE VÁLIDA
                       </ThemedText>
-                      {currentExerciseLastPerf && (
-                        <Pressable
-                          onPress={() => {
-                            setWeightInput(currentExerciseLastPerf.weightKg.toString());
-                            setRepsInput(currentExerciseLastPerf.reps.toString());
-                          }}
-                          hitSlop={6}
-                          style={styles.repeatPerfBtn}>
-                          <ThemedText type="caption" style={{ color: theme.primaryHover }}>
-                            ↻ Repetir {currentExerciseLastPerf.weightKg}kg × {currentExerciseLastPerf.reps}
+                      {currentExercisePR && (
+                        <View style={styles.prBadge}>
+                          <ThemedText type="caption" style={{ color: '#F59E0B', fontWeight: '700' }}>
+                            🏆 PR: {currentExercisePR.maxWeight}kg • 1RM: ~{currentExercisePR.max1RM}kg
                           </ThemedText>
-                        </Pressable>
+                        </View>
                       )}
                     </View>
 
+                    {/* Ghost Sets: Séries da Última Sessão Realizada */}
+                    {currentExerciseLastSessionSets.length > 0 && (
+                      <View style={[styles.ghostSessionBox, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
+                        <ThemedText type="caption" style={{ color: theme.textSecondary, fontWeight: '700', marginBottom: 4 }}>
+                          ÚLTIMO TREINO (META PARA SUPERAR):
+                        </ThemedText>
+                        <View style={styles.ghostSetsRow}>
+                          {currentExerciseLastSessionSets.map((gs, idx) => (
+                            <Pressable
+                              key={gs.id || idx}
+                              onPress={() => {
+                                haptics.light();
+                                setWeightInput(gs.weightKg.toString());
+                                setRepsInput(gs.reps.toString());
+                              }}
+                              style={[styles.ghostSetChip, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                              <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                                S{idx + 1}:
+                              </ThemedText>
+                              <ThemedText type="smallBold" style={{ color: theme.text, marginLeft: 2 }}>
+                                {gs.weightKg}kg × {gs.reps}
+                              </ThemedText>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
                     <View style={styles.inputRow}>
                       <View style={styles.inputCol}>
-                        <ThemedText type="caption">Carga Real (kg)</ThemedText>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <ThemedText type="caption">Carga Real (kg)</ThemedText>
+                          <Pressable
+                            onPress={() => {
+                              haptics.light();
+                              setShowPlateCalcModal(true);
+                            }}
+                            hitSlop={4}
+                            style={styles.plateCalcTriggerBtn}>
+                            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                              ⚖️ Anilhas
+                            </ThemedText>
+                          </Pressable>
+                        </View>
                         <TextInput
                           value={weightInput}
                           onChangeText={setWeightInput}
@@ -551,17 +636,17 @@ export default function WorkoutsScreen() {
                           { backgroundColor: theme.card, borderColor: theme.cardBorder },
                         ]}>
                         <View style={styles.loggedItemLeft}>
-                          <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                          <ThemedText type="smallBold" style={{ color: theme.primary, flexShrink: 0 }}>
                             #{idx + 1}
                           </ThemedText>
-                          <View>
-                            <ThemedText type="smallBold">{s.exercise?.name}</ThemedText>
-                            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                              {s.weightKg} kg × {s.reps} reps
+                          <View style={{ flex: 1 }}>
+                            <ThemedText type="smallBold" numberOfLines={1}>{s.exercise?.name}</ThemedText>
+                            <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                              {s.weightKg} kg × {s.reps} reps {s.reps > 0 && `(1RM ~${calculateOneRepMax(s.weightKg, s.reps)}kg)`}
                             </ThemedText>
                           </View>
                         </View>
-                        <Pressable onPress={() => deleteSet(s.id)} hitSlop={8}>
+                        <Pressable onPress={() => handleDeleteLoggedSet(s.id)} hitSlop={8} style={{ flexShrink: 0 }}>
                           <ThemedText type="caption" style={{ color: theme.danger }}>
                             Excluir
                           </ThemedText>
@@ -972,6 +1057,18 @@ export default function WorkoutsScreen() {
           </View>
         </View>
       </Modal>
+
+        {/* Modal: Calculadora de Anilhas */}
+        <PlateCalculatorModal
+          visible={showPlateCalcModal}
+          initialWeight={parseFloat(weightInput.replace(',', '.')) || currentRoutineExercise?.workingWeightKg || 80}
+          exerciseName={currentExercise?.name || 'Exercício'}
+          onClose={() => setShowPlateCalcModal(false)}
+          onApplyWeight={(weight) => {
+            setWeightInput(weight.toString());
+          }}
+        />
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -982,6 +1079,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    width: '100%',
   },
   scrollView: {
     flex: 1,
@@ -1122,6 +1220,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    flex: 1,
+    marginRight: Spacing.sm,
+    overflow: 'hidden',
   },
   cancelBtn: {
     paddingVertical: Spacing.md,
@@ -1318,5 +1419,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     gap: 2,
+  },
+  prBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  ghostSessionBox: {
+    padding: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    marginVertical: Spacing.xs,
+  },
+  ghostSetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  ghostSetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+  },
+  plateCalcTriggerBtn: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 1,
   },
 });

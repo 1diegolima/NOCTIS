@@ -2,7 +2,10 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { Exercise, SplitType } from '@/database/schema';
 import { exerciseRepository } from '@/features/exercises/exercise-repository';
 import {
@@ -22,6 +25,7 @@ import {
 } from '@/features/routines/routine-repository';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
+import { haptics } from '@/utils/haptics';
 
 export default function RoutinesScreen() {
   const theme = useTheme();
@@ -47,7 +51,11 @@ export default function RoutinesScreen() {
       const routine = routineRepository.getActiveRoutine();
       setActiveRoutine(routine);
       if (routine && routine.workouts.length > 0) {
-        setSelectedWorkout(routine.workouts[0]);
+        setSelectedWorkout((prev) => {
+          if (!prev) return routine.workouts[0];
+          const found = routine.workouts.find((w) => w.id === prev.id);
+          return found || routine.workouts[0];
+        });
       }
       setAllExercises(exerciseRepository.getAll());
     } catch (e) {
@@ -62,6 +70,7 @@ export default function RoutinesScreen() {
   );
 
   const handleSelectSplit = (splitType: SplitType, name: string) => {
+    haptics.medium();
     const created = routineRepository.createRoutine(name, splitType);
     setActiveRoutine(created);
     if (created.workouts.length > 0) {
@@ -71,6 +80,7 @@ export default function RoutinesScreen() {
   };
 
   const handleAddExerciseToWorkout = () => {
+    Keyboard.dismiss();
     if (!selectedWorkout || !selectedExerciseToAdd) {
       Alert.alert('Atenção', 'Selecione um exercício primeiro.');
       return;
@@ -81,6 +91,7 @@ export default function RoutinesScreen() {
     const rMax = parseInt(repsMaxInput, 10) || 10;
     const weight = parseFloat(weightInput.replace(',', '.')) || 0;
 
+    haptics.success();
     routineRepository.addExerciseToWorkout({
       routineWorkoutId: selectedWorkout.id,
       exerciseId: selectedExerciseToAdd.id,
@@ -102,6 +113,7 @@ export default function RoutinesScreen() {
         text: 'Remover',
         style: 'destructive',
         onPress: () => {
+          haptics.medium();
           routineRepository.removeExerciseFromWorkout(routineExerciseId);
           loadRoutineData();
         },
@@ -109,7 +121,19 @@ export default function RoutinesScreen() {
     ]);
   };
 
-  const muscles = ['Todos', 'Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilhas', 'Abdômen'];
+  const muscles = [
+    'Todos',
+    'Peito',
+    'Costas',
+    'Ombros',
+    'Bíceps',
+    'Tríceps',
+    'Quadríceps',
+    'Posteriores',
+    'Glúteos',
+    'Panturrilhas',
+    'Abdômen',
+  ];
 
   const filteredExercises = allExercises.filter((e) => {
     const matchMuscle =
@@ -122,350 +146,459 @@ export default function RoutinesScreen() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + Spacing.xxxl }]}
-          showsVerticalScrollIndicator={false}>
-          {/* Top Bar */}
-          <View style={styles.header}>
-            <View style={styles.headerRow}>
-              <View>
-                <ThemedText type="header">Montar Treino</ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  {activeRoutine ? activeRoutine.name : 'Nenhuma divisão configurada'}
-                </ThemedText>
-              </View>
-              <Pressable
-                onPress={() => setShowSplitModal(true)}
-                style={[styles.splitButton, { borderColor: theme.cardBorder, backgroundColor: theme.card }]}>
-                <ThemedText type="smallBold" style={{ color: theme.primary }}>
-                  Mudar Divisão ⚙
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Abas das Sessões da Divisão (Ex: Push, Pull, Legs, Upper, Lower) */}
-          {activeRoutine && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.workoutTabsScroll}>
-              {activeRoutine.workouts.map((w) => {
-                const isSelected = selectedWorkout?.id === w.id;
-                return (
-                  <Pressable
-                    key={w.id}
-                    onPress={() => setSelectedWorkout(w)}
-                    style={[
-                      styles.workoutTabChip,
-                      {
-                        backgroundColor: isSelected ? theme.primary : theme.card,
-                        borderColor: isSelected ? theme.primary : theme.cardBorder,
-                      },
-                    ]}>
-                    <ThemedText
-                      type="smallBold"
-                      style={{ color: isSelected ? '#FFFFFF' : theme.text }}>
-                      {w.name}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
-
-          {/* Conteúdo da Sessão Selecionada */}
-          {selectedWorkout && (
-            <View style={styles.workoutConfigContainer}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText type="subtitle">
-                  Exercícios ({selectedWorkout.exercises.length})
-                </ThemedText>
+    <Pressable style={[styles.container, { backgroundColor: theme.background }]} onPress={Keyboard.dismiss} accessible={false}>
+        <SafeAreaView edges={['top']} style={styles.safeArea}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: tabBarHeight + Spacing.xxxl },
+            ]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag">
+            {/* Top Bar */}
+            <View style={styles.header}>
+              <View style={styles.headerRow}>
+                <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                  <ThemedText type="header">Montar Treino</ThemedText>
+                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                    {activeRoutine ? activeRoutine.name : 'Nenhuma divisão configurada'}
+                  </ThemedText>
+                </View>
                 <Pressable
-                  onPress={() => setShowAddExerciseModal(true)}
-                  style={[styles.addExerciseBtn, { backgroundColor: theme.primary }]}>
-                  <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                    + Adicionar Exercício
+                  onPress={() => {
+                    haptics.light();
+                    setShowSplitModal(true);
+                  }}
+                  style={[
+                    styles.splitButton,
+                    { borderColor: theme.cardBorder, backgroundColor: theme.card },
+                  ]}>
+                  <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                    Mudar Divisão ⚙
                   </ThemedText>
                 </Pressable>
               </View>
+            </View>
 
-              {selectedWorkout.exercises.length === 0 ? (
-                <View
-                  style={[
-                    styles.emptyCard,
-                    { backgroundColor: theme.card, borderColor: theme.cardBorder },
-                  ]}>
-                  <ThemedText type="default" style={{ color: theme.textSecondary, textAlign: 'center' }}>
-                    Nenhum exercício adicionado a esta sessão.
-                  </ThemedText>
-                  <ThemedText type="small" style={{ color: theme.textMuted, textAlign: 'center', marginTop: 4 }}>
-                    Toque no botão acima para montar seu treino.
-                  </ThemedText>
-                </View>
-              ) : (
-                <View style={styles.exercisesList}>
-                  {selectedWorkout.exercises.map((re, index) => (
-                    <View
-                      key={re.id}
+            {/* Abas das Sessões da Divisão (Ex: Push, Pull, Legs, Upper, Lower) */}
+            {activeRoutine && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.workoutTabsScroll}>
+                {activeRoutine.workouts.map((w) => {
+                  const isSelected = selectedWorkout?.id === w.id;
+                  return (
+                    <Pressable
+                      key={w.id}
+                      onPress={() => {
+                        haptics.light();
+                        setSelectedWorkout(w);
+                      }}
                       style={[
-                        styles.exerciseCard,
-                        { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                        styles.workoutTabChip,
+                        {
+                          backgroundColor: isSelected ? theme.primary : theme.card,
+                          borderColor: isSelected ? theme.primary : theme.cardBorder,
+                        },
                       ]}>
-                      <View style={styles.exerciseCardTop}>
-                        <View style={styles.exerciseCardLeft}>
-                          <View
-                            style={[
-                              styles.indexBadge,
-                              { backgroundColor: theme.backgroundElevated },
-                            ]}>
-                            <ThemedText type="smallBold" style={{ color: theme.primary }}>
-                              #{index + 1}
-                            </ThemedText>
-                          </View>
-                          <View>
-                            <ThemedText type="title">
-                              {re.exercise?.name ?? 'Exercício'}
-                            </ThemedText>
-                            <ThemedText type="caption" style={{ color: theme.textMuted }}>
-                              {re.exercise?.muscleGroup} • {re.exercise?.category}
-                            </ThemedText>
-                          </View>
-                        </View>
-                        <Pressable
-                          onPress={() => handleRemoveExercise(re.id)}
-                          hitSlop={8}>
-                          <ThemedText type="small" style={{ color: theme.danger }}>
-                            Remover
-                          </ThemedText>
-                        </Pressable>
-                      </View>
-
-                      {/* Configurações da Carga e Séries Válidas */}
-                      <View
-                        style={[
-                          styles.configGrid,
-                          { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder },
-                        ]}>
-                        <View style={styles.configItem}>
-                          <ThemedText type="caption">Séries Válidas</ThemedText>
-                          <ThemedText type="smallBold">{re.workingSets} séries</ThemedText>
-                        </View>
-
-                        <View style={styles.configItem}>
-                          <ThemedText type="caption">Faixa Alvo</ThemedText>
-                          <ThemedText type="smallBold">{re.repsMin}–{re.repsMax} reps</ThemedText>
-                        </View>
-
-                        <View style={styles.configItem}>
-                          <ThemedText type="caption">Carga Alvo</ThemedText>
-                          <ThemedText type="smallBold" style={{ color: theme.primary }}>
-                            {re.workingWeightKg} kg
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        </ScrollView>
-      </SafeAreaView>
-
-      {/* Modal: Escolher Divisão de Treino */}
-      <Modal visible={showSplitModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder }]}>
-            <ThemedText type="title">Escolha sua Divisão</ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.md }}>
-              O NOCTIS organizará os treinos automaticamente com base no modelo escolhido:
-            </ThemedText>
-
-            <View style={styles.splitOptionsList}>
-              <Pressable
-                onPress={() => handleSelectSplit('ppl_ul', 'Divisão PPL/UL (5 Dias)')}
-                style={[styles.splitOptionCard, { borderColor: theme.cardBorder }]}>
-                <ThemedText type="smallBold">Push / Pull / Legs / Upper / Lower (5 Dias)</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Ideal para frequência alta e equilíbrio completo.
-                </ThemedText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => handleSelectSplit('ppl', 'Divisão PPL Clássica (3-6 Dias)')}
-                style={[styles.splitOptionCard, { borderColor: theme.cardBorder }]}>
-                <ThemedText type="smallBold">Push / Pull / Legs (3 Dias)</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Divisão clássica por padrão de movimento.
-                </ThemedText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => handleSelectSplit('upper_lower', 'Divisão Upper / Lower (4 Dias)')}
-                style={[styles.splitOptionCard, { borderColor: theme.cardBorder }]}>
-                <ThemedText type="smallBold">Upper / Lower (4 Dias)</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Divisão superior e inferior.
-                </ThemedText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => handleSelectSplit('full_body', 'Divisão Full Body (3 Dias)')}
-                style={[styles.splitOptionCard, { borderColor: theme.cardBorder }]}>
-                <ThemedText type="smallBold">Full Body (3 Dias)</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Corpo inteiro em cada sessão.
-                </ThemedText>
-              </Pressable>
-            </View>
-
-            <Pressable
-              onPress={() => setShowSplitModal(false)}
-              style={[styles.modalCloseBtn, { backgroundColor: theme.backgroundElevated }]}>
-              <ThemedText type="smallBold">Fechar</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal: Adicionar Exercício ao Treino */}
-      <Modal visible={showAddExerciseModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContentBig, { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder }]}>
-            <ThemedText type="title">Biblioteca de Exercícios</ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.xs }}>
-              Selecione o exercício e defina os parâmetros:
-            </ThemedText>
-
-            {/* Campo de Busca por Nome */}
-            <TextInput
-              value={exerciseSearchText}
-              onChangeText={setExerciseSearchText}
-              placeholder="Buscar por nome (ex: Supino, Puxada)..."
-              placeholderTextColor={theme.textMuted}
-              style={[
-                styles.exerciseSearchInput,
-                { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text },
-              ]}
-            />
-
-            {/* Filtro Muscular */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalMuscleScroll}>
-              {muscles.map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => setExerciseSearchMuscle(m)}
-                  style={[
-                    styles.muscleChipSmall,
-                    {
-                      backgroundColor: exerciseSearchMuscle === m ? theme.primary : theme.card,
-                      borderColor: exerciseSearchMuscle === m ? theme.primary : theme.cardBorder,
-                    },
-                  ]}>
-                  <ThemedText type="caption" style={{ color: exerciseSearchMuscle === m ? '#FFFFFF' : theme.textSecondary }}>
-                    {m}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {/* Lista de Exercícios */}
-            <ScrollView style={styles.exercisePickList}>
-              {filteredExercises.map((ex) => {
-                const isSelected = selectedExerciseToAdd?.id === ex.id;
-                return (
-                  <Pressable
-                    key={ex.id}
-                    onPress={() => setSelectedExerciseToAdd(ex)}
-                    style={[
-                      styles.exercisePickItem,
-                      {
-                        backgroundColor: isSelected ? theme.primaryDark : theme.card,
-                        borderColor: isSelected ? theme.primary : theme.cardBorder,
-                      },
-                    ]}>
-                    <ThemedText type="smallBold" style={{ color: isSelected ? theme.primaryHover : theme.text }}>
-                      {ex.name}
-                    </ThemedText>
-                    <ThemedText type="caption" style={{ color: theme.textMuted }}>
-                      {ex.muscleGroup} • {ex.equipment} • {ex.category}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Configuração de Séries e Cargas Alvo */}
-            {selectedExerciseToAdd && (
-              <View style={[styles.formConfigBox, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
-                <ThemedText type="smallBold" style={{ color: theme.primary, marginBottom: Spacing.xs }}>
-                  Configuração: {selectedExerciseToAdd.name}
-                </ThemedText>
-
-                <View style={styles.formRow}>
-                  <View style={styles.formGroup}>
-                    <ThemedText type="caption">Séries Válidas</ThemedText>
-                    <TextInput
-                      value={workingSetsInput}
-                      onChangeText={setWorkingSetsInput}
-                      keyboardType="number-pad"
-                      style={[styles.formInput, { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text }]}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <ThemedText type="caption">Reps Mín.</ThemedText>
-                    <TextInput
-                      value={repsMinInput}
-                      onChangeText={setRepsMinInput}
-                      keyboardType="number-pad"
-                      style={[styles.formInput, { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text }]}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <ThemedText type="caption">Reps Máx.</ThemedText>
-                    <TextInput
-                      value={repsMaxInput}
-                      onChangeText={setRepsMaxInput}
-                      keyboardType="number-pad"
-                      style={[styles.formInput, { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text }]}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <ThemedText type="caption">Carga (kg)</ThemedText>
-                    <TextInput
-                      value={weightInput}
-                      onChangeText={setWeightInput}
-                      keyboardType="numeric"
-                      style={[styles.formInput, { backgroundColor: theme.card, borderColor: theme.cardBorder, color: theme.text }]}
-                    />
-                  </View>
-                </View>
-
-                <Pressable
-                  onPress={handleAddExerciseToWorkout}
-                  style={[styles.confirmAddBtn, { backgroundColor: theme.primary }]}>
-                  <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                    Confirmar e Adicionar
-                  </ThemedText>
-                </Pressable>
-              </View>
+                      <ThemedText
+                        type="smallBold"
+                        style={{ color: isSelected ? '#FFFFFF' : theme.text }}>
+                        {w.name}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             )}
 
-            <Pressable
-              onPress={() => setShowAddExerciseModal(false)}
-              style={[styles.modalCloseBtn, { backgroundColor: theme.backgroundElevated, marginTop: Spacing.sm }]}>
-              <ThemedText type="smallBold">Cancelar</ThemedText>
-            </Pressable>
+            {/* Conteúdo da Sessão Selecionada */}
+            {selectedWorkout && (
+              <View style={styles.workoutConfigContainer}>
+                <View style={styles.sectionHeaderRow}>
+                  <ThemedText type="subtitle">
+                    Exercícios ({selectedWorkout.exercises.length})
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => {
+                      haptics.medium();
+                      setShowAddExerciseModal(true);
+                    }}
+                    style={[styles.addExerciseBtn, { backgroundColor: theme.primary }]}>
+                    <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                      + Adicionar Exercício
+                    </ThemedText>
+                  </Pressable>
+                </View>
+
+                {selectedWorkout.exercises.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptyCard,
+                      { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                    ]}>
+                    <ThemedText type="title" style={{ textAlign: 'center' }}>
+                      Nenhum exercício adicionado
+                    </ThemedText>
+                    <ThemedText
+                      type="small"
+                      style={{ color: theme.textMuted, textAlign: 'center', marginTop: 4 }}>
+                      Toque no botão acima para adicionar exercícios a esta sessão.
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <View style={styles.exercisesList}>
+                    {selectedWorkout.exercises.map((re, index) => (
+                      <View
+                        key={re.id}
+                        style={[
+                          styles.exerciseCard,
+                          { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                        ]}>
+                        {/* Header do Exercício com Nome e Botão Remover Alinhados */}
+                        <View style={styles.exerciseCardTop}>
+                          <View style={styles.exerciseCardLeft}>
+                            <View
+                              style={[
+                                styles.indexBadge,
+                                { backgroundColor: theme.backgroundElevated },
+                              ]}>
+                              <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                                #{index + 1}
+                              </ThemedText>
+                            </View>
+                            <View style={styles.exerciseTitleContainer}>
+                              <ThemedText
+                                type="title"
+                                numberOfLines={1}
+                                style={styles.exerciseNameText}>
+                                {re.exercise?.name ?? 'Exercício'}
+                              </ThemedText>
+                              <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                                {re.exercise?.muscleGroup} • {re.exercise?.category}
+                              </ThemedText>
+                            </View>
+                          </View>
+                          <Pressable
+                            onPress={() => handleRemoveExercise(re.id)}
+                            style={styles.deleteExerciseBtn}
+                            hitSlop={6}>
+                            <ThemedText type="caption" style={{ color: theme.danger, fontWeight: '700' }}>
+                              Remover
+                            </ThemedText>
+                          </Pressable>
+                        </View>
+
+                        {/* Configurações da Carga e Séries Válidas */}
+                        <View
+                          style={[
+                            styles.configGrid,
+                            {
+                              backgroundColor: theme.backgroundElevated,
+                              borderColor: theme.cardBorder,
+                            },
+                          ]}>
+                          <View style={styles.configItem}>
+                            <ThemedText type="caption">Séries Válidas</ThemedText>
+                            <ThemedText type="smallBold">{re.workingSets} séries</ThemedText>
+                          </View>
+
+                          <View style={styles.configItem}>
+                            <ThemedText type="caption">Faixa Alvo</ThemedText>
+                            <ThemedText type="smallBold">
+                              {re.repsMin}–{re.repsMax} reps
+                            </ThemedText>
+                          </View>
+
+                          <View style={styles.configItem}>
+                            <ThemedText type="caption">Carga Alvo</ThemedText>
+                            <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                              {re.workingWeightKg} kg
+                            </ThemedText>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+
+        {/* MODAL 1: MUDAR DIVISÃO DE TREINO */}
+        <Modal
+          visible={showSplitModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowSplitModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder },
+              ]}>
+              <View style={styles.modalHeaderRow}>
+                <ThemedText type="title">Escolha sua Divisão</ThemedText>
+                <Pressable onPress={() => setShowSplitModal(false)} hitSlop={12}>
+                  <ThemedText type="title" style={{ color: theme.textSecondary }}>✕</ThemedText>
+                </Pressable>
+              </View>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                Selecione um modelo de hipertrofia predefinido:
+              </ThemedText>
+
+              <View style={styles.splitOptionsList}>
+                <Pressable
+                  style={[
+                    styles.splitOptionCard,
+                    { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                  ]}
+                  onPress={() =>
+                    handleSelectSplit('ppl_ul', 'Divisão PPL/UL (5 Dias - Push, Pull, Legs, Upper, Lower)')
+                  }>
+                  <ThemedText type="smallBold">PPL + Upper / Lower (5 Dias) 🔥</ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                    Push, Pull, Legs, Upper, Lower (Recomendado para Máxima Hipertrofia)
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.splitOptionCard,
+                    { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                  ]}
+                  onPress={() => handleSelectSplit('ppl', 'Divisão PPL Clássica (3 Dias)')}>
+                  <ThemedText type="smallBold">PPL Clássico (3 a 6 Dias)</ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                    Push (Empurrar), Pull (Puxar), Legs (Pernas)
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.splitOptionCard,
+                    { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                  ]}
+                  onPress={() => handleSelectSplit('upper_lower', 'Divisão Upper / Lower (4 Dias)')}>
+                  <ThemedText type="smallBold">Upper / Lower (4 Dias)</ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                    Superior A, Inferior A, Superior B, Inferior B
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+
+        {/* MODAL 2: ADICIONAR EXERCÍCIO AO TREINO */}
+        <Modal
+          visible={showAddExerciseModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            Keyboard.dismiss();
+            setShowAddExerciseModal(false);
+          }}>
+          <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss} accessible={false}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ width: '100%' }}>
+                <View
+                  style={[
+                    styles.modalContentBig,
+                    { backgroundColor: theme.cardElevated, borderColor: theme.cardBorder },
+                  ]}>
+                  <View style={styles.modalHeaderRow}>
+                    <ThemedText type="title">Adicionar Exercício</ThemedText>
+                    <Pressable
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setShowAddExerciseModal(false);
+                      }}
+                      hitSlop={12}>
+                      <ThemedText type="title" style={{ color: theme.textSecondary }}>✕</ThemedText>
+                    </Pressable>
+                  </View>
+
+                  {/* Filtro por Grupo Muscular */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.modalMuscleScroll}>
+                    {muscles.map((m) => {
+                      const isSel = exerciseSearchMuscle === m;
+                      return (
+                        <Pressable
+                          key={m}
+                          onPress={() => {
+                            haptics.light();
+                            setExerciseSearchMuscle(m);
+                          }}
+                          style={[
+                            styles.muscleChipSmall,
+                            {
+                              backgroundColor: isSel ? theme.primary : theme.backgroundElevated,
+                              borderColor: isSel ? theme.primary : theme.cardBorder,
+                            },
+                          ]}>
+                          <ThemedText
+                            type="caption"
+                            style={{ color: isSel ? '#FFFFFF' : theme.textSecondary }}>
+                            {m}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Busca por Nome */}
+                  <TextInput
+                    value={exerciseSearchText}
+                    onChangeText={setExerciseSearchText}
+                    placeholder="Buscar exercício pelo nome..."
+                    placeholderTextColor={theme.textMuted}
+                    style={[
+                      styles.exerciseSearchInput,
+                      {
+                        backgroundColor: theme.backgroundElevated,
+                        borderColor: theme.cardBorder,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
+
+                  {/* Lista de Exercícios Disponíveis */}
+                  <ScrollView
+                    style={styles.exercisePickList}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled">
+                    {filteredExercises.map((e) => {
+                      const isSelected = selectedExerciseToAdd?.id === e.id;
+                      return (
+                        <Pressable
+                          key={e.id}
+                          onPress={() => {
+                            haptics.light();
+                            setSelectedExerciseToAdd(e);
+                          }}
+                          style={[
+                            styles.exercisePickItem,
+                            {
+                              backgroundColor: isSelected ? theme.primaryMuted : theme.card,
+                              borderColor: isSelected ? theme.primary : theme.cardBorder,
+                            },
+                          ]}>
+                          <ThemedText
+                            type="smallBold"
+                            style={{ color: isSelected ? '#FFFFFF' : theme.text }}>
+                            {e.name}
+                          </ThemedText>
+                          <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                            {e.muscleGroup} • {e.equipment}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Configurações do Exercício Selecionado */}
+                  {selectedExerciseToAdd && (
+                    <View
+                      style={[
+                        styles.formConfigBox,
+                        { backgroundColor: theme.card, borderColor: theme.primary },
+                      ]}>
+                      <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                        CONFIGURAÇÃO DE TRABALHO
+                      </ThemedText>
+
+                      <View style={styles.formRow}>
+                        <View style={styles.formGroup}>
+                          <ThemedText type="caption">Séries Válidas</ThemedText>
+                          <TextInput
+                            value={workingSetsInput}
+                            onChangeText={setWorkingSetsInput}
+                            keyboardType="number-pad"
+                            style={[
+                              styles.formInput,
+                              {
+                                backgroundColor: theme.backgroundElevated,
+                                borderColor: theme.cardBorder,
+                                color: theme.text,
+                              },
+                            ]}
+                          />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                          <ThemedText type="caption">Reps Mín</ThemedText>
+                          <TextInput
+                            value={repsMinInput}
+                            onChangeText={setRepsMinInput}
+                            keyboardType="number-pad"
+                            style={[
+                              styles.formInput,
+                              {
+                                backgroundColor: theme.backgroundElevated,
+                                borderColor: theme.cardBorder,
+                                color: theme.text,
+                              },
+                            ]}
+                          />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                          <ThemedText type="caption">Reps Máx</ThemedText>
+                          <TextInput
+                            value={repsMaxInput}
+                            onChangeText={setRepsMaxInput}
+                            keyboardType="number-pad"
+                            style={[
+                              styles.formInput,
+                              {
+                                backgroundColor: theme.backgroundElevated,
+                                borderColor: theme.cardBorder,
+                                color: theme.text,
+                              },
+                            ]}
+                          />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                          <ThemedText type="caption">Carga Alvo (kg)</ThemedText>
+                          <TextInput
+                            value={weightInput}
+                            onChangeText={setWeightInput}
+                            keyboardType="numeric"
+                            style={[
+                              styles.formInput,
+                              {
+                                backgroundColor: theme.backgroundElevated,
+                                borderColor: theme.cardBorder,
+                                color: theme.text,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+
+                      <Pressable
+                        onPress={handleAddExerciseToWorkout}
+                        style={[styles.confirmAddBtn, { backgroundColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                          Confirmar Exercício no Treino
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              </KeyboardAvoidingView>
+          </Pressable>
+        </Modal>
+    </Pressable>
   );
 }
 
@@ -477,16 +610,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xxxl, // overridden inline with tabBarHeight
-    gap: Spacing.lg,
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    width: '100%',
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
   header: {
-    gap: 4,
+    marginBottom: Spacing.xs,
   },
   headerRow: {
     flexDirection: 'row',
@@ -527,23 +655,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   exercisesList: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   exerciseCard: {
     padding: Spacing.md,
-    borderRadius: Radius.md,
+    borderRadius: Radius.sm,
     borderWidth: 1,
     gap: Spacing.sm,
   },
   exerciseCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   exerciseCardLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    marginRight: Spacing.sm,
+  },
+  exerciseTitleContainer: {
+    flex: 1,
+  },
+  exerciseNameText: {
+    flexShrink: 1,
   },
   indexBadge: {
     width: 28,
@@ -551,6 +687,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xs,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  deleteExerciseBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.xs,
+    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   configGrid: {
     flexDirection: 'row',
@@ -565,21 +712,27 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     padding: Spacing.lg,
   },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
   modalContent: {
     padding: Spacing.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.sm,
     borderWidth: 1,
     gap: Spacing.sm,
   },
   modalContentBig: {
     padding: Spacing.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.sm,
     borderWidth: 1,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   splitOptionsList: {
     gap: Spacing.sm,
@@ -587,19 +740,13 @@ const styles = StyleSheet.create({
   },
   splitOptionCard: {
     padding: Spacing.md,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.xs,
     borderWidth: 1,
     gap: 2,
   },
-  modalCloseBtn: {
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   modalMuscleScroll: {
     maxHeight: 38,
-    marginBottom: Spacing.sm,
+    marginVertical: Spacing.xs,
   },
   muscleChipSmall: {
     paddingHorizontal: Spacing.sm,
@@ -609,7 +756,7 @@ const styles = StyleSheet.create({
     marginRight: Spacing.xs,
   },
   exerciseSearchInput: {
-    height: 42,
+    height: 40,
     borderRadius: Radius.xs,
     borderWidth: 1,
     paddingHorizontal: Spacing.sm,
@@ -617,7 +764,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   exercisePickList: {
-    maxHeight: 250,
+    maxHeight: 220,
   },
   exercisePickItem: {
     padding: Spacing.sm,
