@@ -32,6 +32,41 @@ jobs:
         env:
           CI: 1
 
+      - name: 🔧 Patch Podfile — fix Swift/C++ interop (Xcode 16 + expo-modules-jsi)
+        run: |
+          python3 - << 'PYEOF'
+          with open('ios/Podfile', 'r') as f:
+              content = f.read()
+
+          fix = """
+            # Fix: RuntimeScheduler C++ interop error com Xcode 16
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                swiftflags = config.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
+                unless swiftflags.include?('-disable-cxx-interop')
+                  config.build_settings['OTHER_SWIFT_FLAGS'] = swiftflags + ' -Xfrontend -disable-cxx-interop'
+                end
+              end
+            end
+          """
+
+          # Inserir logo após a abertura do bloco post_install
+          patched = content.replace(
+              'post_install do |installer|',
+              'post_install do |installer|' + fix,
+              1
+          )
+
+          if patched == content:
+              # Podfile não tem post_install, adicionar no final
+              patched = content + "\npost_install do |installer|\n" + fix + "\nend\n"
+
+          with open('ios/Podfile', 'w') as f:
+              f.write(patched)
+
+          print("✅ Podfile patcheado com sucesso!")
+          PYEOF
+
       - name: 🍎 Instalar CocoaPods
         run: |
           cd ios
@@ -39,11 +74,11 @@ jobs:
           cd ..
 
       - name: 🔍 Listar Schemes disponíveis
-        run: |
-          xcodebuild -workspace ios/NOCTIS.xcworkspace -list
+        run: xcodebuild -workspace ios/NOCTIS.xcworkspace -list
 
       - name: 🏗️ Compilar App (sem assinatura)
         run: |
+          set -o pipefail
           xcodebuild \
             -workspace ios/NOCTIS.xcworkspace \
             -scheme NOCTIS \
@@ -57,13 +92,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            build 2>&1 | tee build_log.txt; \
-          EXIT_CODE=${PIPESTATUS[0]}; \
-          if [ $EXIT_CODE -ne 0 ]; then \
-            echo "::error::xcodebuild falhou com código $EXIT_CODE"; \
-            grep -E "(error:|BUILD FAILED)" build_log.txt | head -50; \
-            exit $EXIT_CODE; \
-          fi
+            build 2>&1 | tee build_log.txt
 
       - name: 📂 Localizar .app gerado
         id: find_app
