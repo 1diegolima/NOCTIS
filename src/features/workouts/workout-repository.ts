@@ -146,6 +146,55 @@ export const workoutRepository = {
   },
 
   /**
+   * Retorna todas as séries executadas na última sessão em que este exercício foi feito
+   */
+  getLastSessionSetsForExercise(
+    exerciseId: string,
+    excludeSessionId?: string
+  ): SessionSet[] {
+    const sets = db
+      .select()
+      .from(sessionSets)
+      .where(eq(sessionSets.exerciseId, exerciseId))
+      .orderBy(desc(sessionSets.completedAt))
+      .all();
+
+    const previousSet = sets.find((s) => !excludeSessionId || s.sessionId !== excludeSessionId);
+    if (!previousSet) return [];
+
+    return sets.filter((s) => s.sessionId === previousSet.sessionId);
+  },
+
+  /**
+   * Retorna os recordes pessoais (PRs) de um exercício
+   */
+  getExercisePR(
+    exerciseId: string
+  ): { maxWeight: number; max1RM: number; maxVolumeSet: number } | null {
+    const sets = db
+      .select()
+      .from(sessionSets)
+      .where(eq(sessionSets.exerciseId, exerciseId))
+      .all();
+
+    if (sets.length === 0) return null;
+
+    let maxWeight = 0;
+    let max1RM = 0;
+    let maxVolumeSet = 0;
+
+    for (const s of sets) {
+      if (s.weightKg > maxWeight) maxWeight = s.weightKg;
+      const est1rm = calculateOneRepMax(s.weightKg, s.reps);
+      if (est1rm > max1RM) max1RM = est1rm;
+      const vol = s.weightKg * s.reps;
+      if (vol > maxVolumeSet) maxVolumeSet = vol;
+    }
+
+    return { maxWeight, max1RM, maxVolumeSet };
+  },
+
+  /**
    * Retorna os IDs das sessões de rotina (routineWorkoutId) já concluídas hoje
    */
   getCompletedRoutineWorkoutIdsToday(): Set<string> {
@@ -169,3 +218,11 @@ export const workoutRepository = {
     return ids;
   },
 };
+
+export function calculateOneRepMax(weightKg: number, reps: number): number {
+  if (reps <= 0 || weightKg <= 0) return 0;
+  if (reps === 1) return weightKg;
+  // Fórmula de Epley: Carga * (1 + Reps / 30)
+  return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+}
+
