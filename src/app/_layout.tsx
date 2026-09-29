@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { FloatingRestTimer } from '@/components/floating-rest-timer';
+import { RestTimerProvider } from '@/contexts/rest-timer-context';
 import { initDatabase } from '@/database/client';
 
 SplashScreen.preventAutoHideAsync();
@@ -20,9 +22,12 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={DarkTheme}>
-      <StatusBar style="light" />
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <RestTimerProvider>
+        <StatusBar style="light" />
+        <AnimatedSplashOverlay />
+        <AppTabs />
+        <FloatingRestTimer />
+      </RestTimerProvider>
     </ThemeProvider>
   );
 }
