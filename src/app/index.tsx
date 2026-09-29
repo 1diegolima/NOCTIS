@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { WeeklyBar } from '@/components/weekly-bar';
+import { ConsistencyHeatmap } from '@/components/consistency-heatmap';
+import { WorkoutDetailModal } from '@/components/workout-detail-modal';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { WorkoutSession } from '@/database/schema';
 import {
@@ -15,6 +17,7 @@ import { workoutRepository } from '@/features/workouts/workout-repository';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
+import { haptics } from '@/utils/haptics';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -27,6 +30,7 @@ export default function HomeScreen() {
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   const [suggestedSession, setSuggestedSession] =
     useState<RoutineWorkoutWithExercises | null>(null);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const todayJsDay = new Date().getDay();
 
   const loadDashboardData = useCallback(() => {
@@ -97,6 +101,9 @@ export default function HomeScreen() {
             </View>
             <WeeklyBar completedDays={completedDays} todayJsDay={todayJsDay} />
           </View>
+
+          {/* Mapa de Consistência (Heatmap) */}
+          <ConsistencyHeatmap />
 
           {/* Card Principal: Treino */}
           <View
@@ -235,8 +242,12 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.workoutList}>
               {recentWorkouts.map((w) => (
-                <View
+                <Pressable
                   key={w.id}
+                  onPress={() => {
+                    haptics.light();
+                    setSelectedWorkoutId(w.id);
+                  }}
                   style={[
                     styles.workoutHistoryItem,
                     { backgroundColor: theme.card, borderColor: theme.cardBorder },
@@ -247,15 +258,28 @@ export default function HomeScreen() {
                       {new Date(w.startedAt).toLocaleDateString('pt-BR')}
                     </ThemedText>
                   </View>
-                  <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                    {w.completedAt ? 'Concluído' : 'Em andamento'}
-                  </ThemedText>
-                </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                      {w.completedAt ? 'Concluído' : 'Em andamento'}
+                    </ThemedText>
+                    <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                      Ver Detalhes →
+                    </ThemedText>
+                  </View>
+                </Pressable>
               ))}
             </View>
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {/* Modal de Detalhes do Treino */}
+      <WorkoutDetailModal
+        workoutId={selectedWorkoutId}
+        visible={selectedWorkoutId !== null}
+        onClose={() => setSelectedWorkoutId(null)}
+        onDeleted={loadDashboardData}
+      />
     </View>
   );
 }
