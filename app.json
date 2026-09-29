@@ -34,6 +34,19 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2ee79029-5d67-48dc-8d2b-f71c6d7de5ff"
+      }
+    },
+    "owner": "dezekas",
+    "ios": {
+      "bundleIdentifier": "com.dezekas.NOCTIS",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   }
 }

@@ -1,0 +1,56 @@
+name: Build iOS IPA (Free Personal Sideloading)
+
+on:
+  push:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Instalar Dependências do Projeto
+        run: npm install --legacy-peer-deps
+
+      - name: 🔨 Gerar Projeto Nativo iOS (Prebuild)
+        run: npx expo prebuild --platform ios --clean
+
+      - name: 🍎 Instalar CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      - name: 🏗️ Compilar App Nativo (.app)
+        run: |
+          xcodebuild -workspace ios/NOCTIS.xcworkspace \
+            -scheme NOCTIS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/NOCTIS.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive
+
+      - name: 📦 Empacotar como NOCTIS.ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/NOCTIS.xcarchive/Products/Applications/NOCTIS.app Payload/
+          zip -r NOCTIS.ipa Payload
+
+      - name: 🚀 Disponibilizar NOCTIS.ipa para Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOCTIS-iOS-IPA
+          path: NOCTIS.ipa
+          retention-days: 14
