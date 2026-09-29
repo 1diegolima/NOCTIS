@@ -87,6 +87,28 @@ export const sessionSets = sqliteTable('session_sets', {
   completedAt: integer('completed_at').notNull(),
 });
 
+// ==========================================
+// 4. EVOLUÇÃO FÍSICA E FOTOS MENSAIS
+// ==========================================
+export const evolutionEntries = sqliteTable('evolution_entries', {
+  id: text('id').primaryKey(), // ex: '2026-07' ou uuid
+  year: integer('year').notNull(),
+  month: integer('month').notNull(), // 1 a 12
+  coverPhotoUri: text('cover_photo_uri').notNull(), // foto principal de frente
+  weightKg: real('weight_kg'),
+  bodyFat: real('body_fat'),
+  notes: text('notes'),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const evolutionPhotos = sqliteTable('evolution_photos', {
+  id: text('id').primaryKey(),
+  entryId: text('entry_id').notNull().references(() => evolutionEntries.id, { onDelete: 'cascade' }),
+  photoUri: text('photo_uri').notNull(),
+  pose: text('pose').notNull().default('outro'), // 'frente' | 'costas' | 'lado_direito' | 'lado_esquerdo' | 'outro'
+  createdAt: integer('created_at').notNull(),
+});
+
 // Infer Types
 export type Exercise = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
@@ -105,3 +127,10 @@ export type NewWorkoutSession = typeof workoutSessions.$inferInsert;
 
 export type SessionSet = typeof sessionSets.$inferSelect;
 export type NewSessionSet = typeof sessionSets.$inferInsert;
+
+export type EvolutionEntry = typeof evolutionEntries.$inferSelect;
+export type NewEvolutionEntry = typeof evolutionEntries.$inferInsert;
+
+export type EvolutionPhoto = typeof evolutionPhotos.$inferSelect;
+export type NewEvolutionPhoto = typeof evolutionPhotos.$inferInsert;
+
