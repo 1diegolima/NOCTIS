@@ -24,12 +24,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: 💎 Ruby + CocoaPods estável
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: false
-
       - name: 📦 Instalar Dependências JS
         run: npm install --legacy-peer-deps
 
@@ -38,11 +32,47 @@ jobs:
         env:
           CI: 1
 
+      - name: 🔧 Patch Podfile (deployment target + C++ standard)
+        run: |
+          python3 - << 'PYEOF'
+          with open('ios/Podfile', 'r') as f:
+              content = f.read()
+
+          # Patch pós-instalação: corrige deployment target e C++ standard
+          # para compatibilidade com React Native 0.76+ e Xcode 16
+          fix = """
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                # React Native 0.76+ requer iOS 15.1 no mínimo
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                # C++17 é mais compatível com Xcode 16 que C++20
+                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+              end
+            end
+          """
+
+          if 'post_install do |installer|' in content:
+              patched = content.replace(
+                  'post_install do |installer|',
+                  'post_install do |installer|\n' + fix,
+                  1
+              )
+          else:
+              patched = content + '\npost_install do |installer|\n' + fix + '\nend\n'
+
+          with open('ios/Podfile', 'w') as f:
+              f.write(patched)
+
+          print('✅ Podfile patcheado!')
+          PYEOF
+
+      - name: 💎 Instalar xcpretty
+        run: gem install xcpretty --no-document
+
       - name: 🍎 CocoaPods install
         run: |
-          gem install cocoapods --no-document
           cd ios
-          pod install
+          pod install --repo-update
           cd ..
 
       - name: 🔗 Resolver Swift Package Dependencies
@@ -55,6 +85,7 @@ jobs:
 
       - name: 🏗️ Build (sem assinatura)
         run: |
+          set -o pipefail
           xcodebuild \
             -workspace ios/NOCTIS.xcworkspace \
             -scheme NOCTIS \
@@ -68,15 +99,21 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            2>&1 | tee build_log.txt
-          BUILD_EXIT=${PIPESTATUS[0]}
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== ERROS ==="
-            grep -E "error:" build_log.txt | grep -v "^note:" | head -60
-            exit $BUILD_EXIT
-          fi
+            build 2>&1 | tee build_log.txt | xcpretty --color
 
-      - name: 📋 Upload log (só se falhar)
+      - name: ❌ Mostrar erros (só se falhar)
+        if: failure()
+        run: |
+          echo "========================================="
+          echo "ERROS DO BUILD:"
+          echo "========================================="
+          grep -E "^\s*(error:|fatal error:)" build_log.txt | head -80 || true
+          echo "-----------------------------------------"
+          echo "ÚLTIMAS 50 LINHAS DO LOG:"
+          echo "-----------------------------------------"
+          tail -n 50 build_log.txt || true
+
+      - name: 📋 Upload log completo (só se falhar)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
