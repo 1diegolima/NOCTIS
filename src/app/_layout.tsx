@@ -1,18 +1,33 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { FloatingRestTimer } from '@/components/floating-rest-timer';
+import { RestTimerProvider } from '@/contexts/rest-timer-context';
+import { initDatabase } from '@/database/client';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  useEffect(() => {
+    try {
+      initDatabase();
+    } catch (e) {
+      console.error('Erro ao inicializar banco de dados:', e);
+    }
+  }, []);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider value={DarkTheme}>
+      <RestTimerProvider>
+        <StatusBar style="light" />
+        <AnimatedSplashOverlay />
+        <AppTabs />
+        <FloatingRestTimer />
+      </RestTimerProvider>
     </ThemeProvider>
   );
 }
