@@ -41,6 +41,24 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="analytics">
+        <NativeTabs.Trigger.Label>Evolução</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf="chart.xyaxis.line"
+          src={require('@/assets/images/tabIcons/explore.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="photos">
+        <NativeTabs.Trigger.Label>Fotos</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf="camera.fill"
+          src={require('@/assets/images/tabIcons/explore.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
