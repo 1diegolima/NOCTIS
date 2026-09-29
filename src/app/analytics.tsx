@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackupModal } from '@/components/backup-modal';
+import { ProgressionChart } from '@/components/progression-chart';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import {
@@ -34,7 +36,9 @@ export default function AnalyticsScreen() {
   const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrendItem[]>([]);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [progressionPoints, setProgressionPoints] = useState<ExerciseProgressionPoint[]>([]);
+  const [chartMetric, setChartMetric] = useState<'estimated1RM' | 'weightKg'>('estimated1RM');
   const [searchPR, setSearchPR] = useState('');
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   const loadData = useCallback(() => {
     try {
@@ -75,7 +79,7 @@ export default function AnalyticsScreen() {
   const maxTonnage = Math.max(...weeklyTrend.map((w) => w.tonnage), 1);
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+    <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <SafeAreaView edges={['top']} style={styles.safeArea}>
           <ScrollView
@@ -88,19 +92,26 @@ export default function AnalyticsScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag">
             {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
-              <ThemedText type="header">Evolução</ThemedText>
-              <View style={[styles.glowBadge, { backgroundColor: theme.primaryDark, borderColor: theme.primary }]}>
-                <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
-                  SOBRECARGA
-                </ThemedText>
+            <View style={styles.header}>
+              <View style={styles.headerTitleRow}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="header">Evolução</ThemedText>
+                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                    Monitore sua força, recordes e volume de treino.
+                  </ThemedText>
+                </View>
+                <Pressable
+                  onPress={() => {
+                    haptics.light();
+                    setShowBackupModal(true);
+                  }}
+                  style={[styles.backupBtn, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
+                  <ThemedText type="smallBold" style={{ color: theme.primaryHover }}>
+                    💾 Backup
+                  </ThemedText>
+                </Pressable>
               </View>
             </View>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Monitore sua força, recordes e volume semanal de treino.
-            </ThemedText>
-          </View>
 
           {/* Seletor de Abas Internas */}
           <View style={[styles.tabBar, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -148,7 +159,7 @@ export default function AnalyticsScreen() {
               <ThemedText
                 type="smallBold"
                 style={{ color: activeTab === 'progression' ? theme.primary : theme.textSecondary }}>
-                📈 1RM Histórico
+                📈 Gráfico & 1RM
               </ThemedText>
             </Pressable>
           </View>
@@ -249,7 +260,7 @@ export default function AnalyticsScreen() {
             </View>
           )}
 
-          {/* 2. ABA: VOLUME SEMANAL & POR GRUPO */}
+          {/* 2. ABA: VOLUME SEMANAL & POR GRUPO COM ALERTAS */}
           {activeTab === 'volume' && (
             <View style={styles.sectionContainer}>
               {/* Tendência Semanal */}
@@ -293,10 +304,15 @@ export default function AnalyticsScreen() {
                 </View>
               </View>
 
-              {/* Volume por Músculo */}
-              <ThemedText type="subtitle" style={{ marginTop: Spacing.sm }}>
-                Séries Válidas nesta Semana
-              </ThemedText>
+              {/* Volume por Músculo com Alertas de Sobrecarga / Volume Ótimo */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.sm }}>
+                <ThemedText type="subtitle">
+                  Volume por Grupo Muscular
+                </ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textMuted }}>
+                  Últimos 7 dias
+                </ThemedText>
+              </View>
 
               {muscleVolume.length === 0 ? (
                 <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -307,18 +323,55 @@ export default function AnalyticsScreen() {
               ) : (
                 <View style={styles.muscleList}>
                   {muscleVolume.map((mv) => {
-                    const targetWeeklySets = 12; // Meta padrão de hipertrofia
+                    const isBelow = mv.setsCount < 10;
+                    const isOptimal = mv.setsCount >= 10 && mv.setsCount <= 20;
+                    const isHigh = mv.setsCount > 20;
+                    const targetWeeklySets = 16;
                     const progress = Math.min(1, mv.setsCount / targetWeeklySets);
 
                     return (
                       <View
                         key={mv.muscleGroup}
-                        style={[styles.muscleCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                        style={[
+                          styles.muscleCard,
+                          {
+                            backgroundColor: theme.card,
+                            borderColor: isHigh ? 'rgba(239, 68, 68, 0.4)' : isOptimal ? 'rgba(34, 197, 94, 0.4)' : theme.cardBorder,
+                          },
+                        ]}>
                         <View style={styles.muscleCardHeader}>
-                          <ThemedText type="smallBold">{mv.muscleGroup}</ThemedText>
-                          <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
-                            {mv.setsCount} séries • {mv.tonnage} kg
-                          </ThemedText>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText type="smallBold">{mv.muscleGroup}</ThemedText>
+                            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
+                              {mv.setsCount} séries válidas • {mv.tonnage} kg acumulados
+                            </ThemedText>
+                          </View>
+                          <View
+                            style={[
+                              styles.volumeBadge,
+                              {
+                                backgroundColor: isOptimal
+                                  ? 'rgba(34, 197, 94, 0.15)'
+                                  : isHigh
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : 'rgba(234, 179, 8, 0.15)',
+                                borderColor: isOptimal
+                                  ? 'rgba(34, 197, 94, 0.4)'
+                                  : isHigh
+                                  ? 'rgba(239, 68, 68, 0.4)'
+                                  : 'rgba(234, 179, 8, 0.4)',
+                              },
+                            ]}>
+                            <ThemedText
+                              type="caption"
+                              style={{
+                                color: isOptimal ? '#22c55e' : isHigh ? '#EF4444' : '#EAB308',
+                                fontWeight: '700',
+                                fontSize: 11,
+                              }}>
+                              {isOptimal ? 'Faixa Ótima' : isHigh ? 'Volume Alto' : 'Construindo'}
+                            </ThemedText>
+                          </View>
                         </View>
 
                         {/* Barra de Progresso */}
@@ -328,17 +381,17 @@ export default function AnalyticsScreen() {
                               styles.muscleProgressBarFill,
                               {
                                 width: `${progress * 100}%`,
-                                backgroundColor: mv.setsCount >= 10 ? '#22c55e' : theme.primary,
+                                backgroundColor: isOptimal ? '#22c55e' : isHigh ? '#EF4444' : theme.primary,
                               },
                             ]}
                           />
                         </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
-                          <ThemedText type="caption" style={{ color: theme.textMuted, fontSize: 10 }}>
-                            {mv.setsCount >= 10 ? 'Faixa Ideal Atingida' : 'Construindo volume'}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                          <ThemedText type="caption" style={{ color: isBelow ? '#EAB308' : isOptimal ? '#22c55e' : '#EF4444', fontSize: 10, fontWeight: '600' }}>
+                            {isBelow ? '⚠️ Abaixo do MEV (<10 séries)' : isOptimal ? '✅ Faixa ideal de hipertrofia' : '🔴 Acima do MRV (>20 séries — Monitore)'}
                           </ThemedText>
                           <ThemedText type="caption" style={{ color: theme.textMuted, fontSize: 10 }}>
-                            Meta: 10-16 séries
+                            Alvo: 10-20 séries/sem
                           </ThemedText>
                         </View>
                       </View>
@@ -349,7 +402,7 @@ export default function AnalyticsScreen() {
             </View>
           )}
 
-          {/* 3. ABA: EVOLUÇÃO 1RM HISTÓRICO */}
+          {/* 3. ABA: EVOLUÇÃO GRÁFICA & 1RM HISTÓRICO */}
           {activeTab === 'progression' && (
             <View style={styles.sectionContainer}>
               {/* Seletor de Exercício */}
@@ -384,17 +437,70 @@ export default function AnalyticsScreen() {
               {progressionPoints.length === 0 ? (
                 <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
                   <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center' }}>
-                    Selecione um exercício que já possua séries registradas para visualizar a linha do tempo.
+                    Selecione um exercício que já possua séries registradas para visualizar a evolução gráfica.
                   </ThemedText>
                 </View>
               ) : (
                 <View style={styles.timelineContainer}>
+                  {/* Gráfico de Linha de Progressão */}
+                  <View style={[styles.chartContainerCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                    <View style={styles.chartHeaderRow}>
+                      <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                        CURVA DE PROGRESSÃO VISUAL
+                      </ThemedText>
+                      {/* Alternador de Métrica */}
+                      <View style={[styles.metricToggleContainer, { backgroundColor: theme.backgroundElevated }]}>
+                        <Pressable
+                          onPress={() => {
+                            haptics.light();
+                            setChartMetric('estimated1RM');
+                          }}
+                          style={[
+                            styles.metricToggleBtn,
+                            chartMetric === 'estimated1RM' && { backgroundColor: theme.primary },
+                          ]}>
+                          <ThemedText
+                            type="caption"
+                            style={{
+                              color: chartMetric === 'estimated1RM' ? '#FFFFFF' : theme.textMuted,
+                              fontWeight: chartMetric === 'estimated1RM' ? '700' : '400',
+                              fontSize: 10,
+                            }}>
+                            1RM
+                          </ThemedText>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            haptics.light();
+                            setChartMetric('weightKg');
+                          }}
+                          style={[
+                            styles.metricToggleBtn,
+                            chartMetric === 'weightKg' && { backgroundColor: theme.primary },
+                          ]}>
+                          <ThemedText
+                            type="caption"
+                            style={{
+                              color: chartMetric === 'weightKg' ? '#FFFFFF' : theme.textMuted,
+                              fontWeight: chartMetric === 'weightKg' ? '700' : '400',
+                              fontSize: 10,
+                            }}>
+                            Carga
+                          </ThemedText>
+                        </Pressable>
+                      </View>
+                    </View>
+
+                    <ProgressionChart points={progressionPoints} metricKey={chartMetric} />
+                  </View>
+
+                  {/* Resumo e Lista de Pontos */}
                   <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
                     <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
-                      PONTOS DE PROGRESSÃO ({progressionPoints.length})
+                      REGISTROS INDIVIDUAIS ({progressionPoints.length})
                     </ThemedText>
                     <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                      Histórico de séries válidas e força estimada calculada.
+                      Histórico detalhado das séries válidas executadas.
                     </ThemedText>
                   </View>
 
@@ -424,8 +530,17 @@ export default function AnalyticsScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {/* MODAL DE BACKUP & EXPORTAÇÃO */}
+      <BackupModal
+        visible={showBackupModal}
+        onClose={() => {
+          setShowBackupModal(false);
+          loadData();
+        }}
+      />
     </View>
-  </TouchableWithoutFeedback>
+  </Pressable>
   );
 }
 
@@ -450,6 +565,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  backupBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
   },
   glowBadge: {
     paddingHorizontal: Spacing.sm,
@@ -628,5 +749,33 @@ const styles = StyleSheet.create({
   },
   timelineRight: {
     alignItems: 'flex-end',
+  },
+  volumeBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+  },
+  chartContainerCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  chartHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  metricToggleContainer: {
+    flexDirection: 'row',
+    borderRadius: Radius.xs,
+    padding: 2,
+    gap: 2,
+  },
+  metricToggleBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 3,
   },
 });
