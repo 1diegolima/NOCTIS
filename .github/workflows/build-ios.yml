@@ -8,11 +8,13 @@ on:
 jobs:
   build-ios:
     runs-on: macos-15
+    timeout-minutes: 60
+
     steps:
       - name: 📥 Checkout do Repositório
         uses: actions/checkout@v4
 
-      - name: 🛠️ Configurar Xcode 16+
+      - name: 🛠️ Configurar Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: 'latest-stable'
@@ -21,45 +23,72 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      - name: 📦 Instalar Dependências do Projeto
+      - name: 📦 Instalar Dependências
         run: npm install --legacy-peer-deps
 
       - name: 🔨 Gerar Projeto Nativo iOS (Prebuild)
-        run: npx expo prebuild --platform ios --clean
+        run: npx expo prebuild --platform ios --clean --non-interactive
+        env:
+          CI: 1
 
       - name: 🍎 Instalar CocoaPods
         run: |
           cd ios
-          pod install
+          pod install --repo-update
           cd ..
 
-      - name: 🏗️ Compilar App Nativo (.app)
+      - name: 🔍 Listar Schemes disponíveis
         run: |
-          xcodebuild -workspace ios/NOCTIS.xcworkspace \
+          xcodebuild -workspace ios/NOCTIS.xcworkspace -list
+
+      - name: 🏗️ Compilar App (sem assinatura)
+        run: |
+          xcodebuild \
+            -workspace ios/NOCTIS.xcworkspace \
             -scheme NOCTIS \
             -configuration Release \
+            -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
+            -derivedDataPath "$PWD/DerivedData" \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            build
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build 2>&1 | tee build_log.txt; \
+          EXIT_CODE=${PIPESTATUS[0]}; \
+          if [ $EXIT_CODE -ne 0 ]; then \
+            echo "::error::xcodebuild falhou com código $EXIT_CODE"; \
+            grep -E "(error:|BUILD FAILED)" build_log.txt | head -50; \
+            exit $EXIT_CODE; \
+          fi
+
+      - name: 📂 Localizar .app gerado
+        id: find_app
+        run: |
+          APP_PATH=$(find "$PWD/DerivedData" -name "*.app" -type d \
+            | grep -v "\.appex" \
+            | grep "Release-iphoneos" \
+            | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find "$PWD/DerivedData" -name "*.app" -type d \
+              | grep -v "\.appex" \
+              | head -n 1)
+          fi
+          echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
+          echo "App encontrado em: $APP_PATH"
 
       - name: 📦 Empacotar como NOCTIS.ipa
         run: |
           mkdir -p Payload
-          APP_PATH=$(find build -name "NOCTIS.app" -type d | grep "Release-iphoneos" | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build -name "*.app" -type d | head -n 1)
-          fi
-          echo "App path: $APP_PATH"
-          cp -r "$APP_PATH" Payload/
+          cp -r "${{ steps.find_app.outputs.app_path }}" Payload/
           zip -r NOCTIS.ipa Payload
+          echo "IPA gerado com sucesso!"
+          ls -lh NOCTIS.ipa
 
-      - name: 🚀 Disponibilizar NOCTIS.ipa para Download
+      - name: 🚀 Upload NOCTIS.ipa
         uses: actions/upload-artifact@v4
         with:
           name: NOCTIS-iOS-IPA
