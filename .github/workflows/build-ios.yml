@@ -14,7 +14,7 @@ jobs:
       - name: 📥 Checkout do Repositório
         uses: actions/checkout@v4
 
-      - name: 🛠️ Configurar Xcode 16.2 (estável com Expo 57)
+      - name: 🛠️ Configurar Xcode 16.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.2'
@@ -31,39 +31,6 @@ jobs:
         run: npx expo prebuild --platform ios --clean --non-interactive
         env:
           CI: 1
-
-      - name: 🔧 Patch Podfile — fix Swift/C++ interop
-        run: |
-          python3 - << 'PYEOF'
-          with open('ios/Podfile', 'r') as f:
-              content = f.read()
-
-          fix = """
-            # Fix: RuntimeScheduler C++ interop error com Xcode 16
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                swiftflags = config.build_settings['OTHER_SWIFT_FLAGS'] || '$(inherited)'
-                unless swiftflags.include?('-disable-cxx-interop')
-                  config.build_settings['OTHER_SWIFT_FLAGS'] = swiftflags + ' -Xfrontend -disable-cxx-interop'
-                end
-              end
-            end
-          """
-
-          patched = content.replace(
-              'post_install do |installer|',
-              'post_install do |installer|' + fix,
-              1
-          )
-
-          if patched == content:
-              patched = content + "\npost_install do |installer|\n" + fix + "\nend\n"
-
-          with open('ios/Podfile', 'w') as f:
-              f.write(patched)
-
-          print("Podfile patcheado!")
-          PYEOF
 
       - name: 🍎 Instalar CocoaPods
         run: |
@@ -90,16 +57,15 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             build 2>&1 | tee build_log.txt
-          echo "Exit code: ${PIPESTATUS[0]}"
-          # Mostrar erros reais se falhou
-          if grep -q "BUILD FAILED" build_log.txt; then
+          BUILD_EXIT=${PIPESTATUS[0]}
+          if [ $BUILD_EXIT -ne 0 ]; then
             echo "=== ERROS DO BUILD ==="
-            grep -E "error:|BUILD FAILED" build_log.txt | head -80
-            exit 65
+            grep -E "error:" build_log.txt | grep -v "^note:" | head -60
+            exit $BUILD_EXIT
           fi
 
       - name: 📋 Upload Log de Build (para debug)
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
