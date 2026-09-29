@@ -27,26 +27,37 @@ jobs:
       - name: 📦 Instalar Dependências JS
         run: npm install --legacy-peer-deps
 
+      - name: 🔧 Fix RuntimeScheduler.h — SWIFT_RETURNS_RETAINED em construtores é inválido
+        run: |
+          FILE="node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h"
+          # SWIFT_RETURNS_RETAINED só é válido em funções que retornam ponteiros SWIFT_SHARED_REFERENCE.
+          # Construtores C++ não "retornam" nada — o Xcode 16 rejeita a anotação com erro.
+          # A classe continua sendo SWIFT_SHARED_REFERENCE (linha 90), o ARC funciona corretamente.
+          sed -i '' 's/SWIFT_RETURNS_RETAINED RuntimeScheduler/RuntimeScheduler/g' "$FILE"
+          echo "✅ RuntimeScheduler.h patcheado!"
+          grep -n "SWIFT_RETURNS" "$FILE" && echo "⚠️ Ainda há anotações SWIFT_RETURNS" || echo "✅ Nenhum SWIFT_RETURNS_RETAINED nos construtores"
+
+      - name: 🔇 Remove -quiet do inner build (melhor visibilidade de erros)
+        run: |
+          SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
+          sed -i '' 's/    -quiet \\//' "$SCRIPT"
+          echo "✅ -quiet removido do build script"
+
       - name: 🔨 Expo Prebuild
         run: npx expo prebuild --platform ios --clean --non-interactive
         env:
           CI: 1
 
-      - name: 🔧 Patch Podfile (deployment target + C++ standard)
+      - name: 🔧 Patch Podfile (deployment target)
         run: |
           python3 - << 'PYEOF'
           with open('ios/Podfile', 'r') as f:
               content = f.read()
 
-          # Patch pós-instalação: corrige deployment target e C++ standard
-          # para compatibilidade com React Native 0.76+ e Xcode 16
           fix = """
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                # React Native 0.76+ requer iOS 15.1 no mínimo
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                # C++17 é mais compatível com Xcode 16 que C++20
-                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
               end
             end
           """
@@ -62,7 +73,6 @@ jobs:
 
           with open('ios/Podfile', 'w') as f:
               f.write(patched)
-
           print('✅ Podfile patcheado!')
           PYEOF
 
@@ -107,13 +117,13 @@ jobs:
           echo "========================================="
           echo "ERROS DO BUILD:"
           echo "========================================="
-          grep -E "^\s*(error:|fatal error:)" build_log.txt | head -80 || true
+          grep -iE "(error:|fatal error:)" build_log.txt | grep -v "^note:" | head -100 || true
           echo "-----------------------------------------"
-          echo "ÚLTIMAS 50 LINHAS DO LOG:"
+          echo "ÚLTIMAS 80 LINHAS:"
           echo "-----------------------------------------"
-          tail -n 50 build_log.txt || true
+          tail -n 80 build_log.txt || true
 
-      - name: 📋 Upload log completo (só se falhar)
+      - name: 📋 Upload log (só se falhar)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
