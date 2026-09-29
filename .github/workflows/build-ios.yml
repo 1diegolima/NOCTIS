@@ -11,37 +11,49 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - name: 📥 Checkout do Repositório
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: 🛠️ Configurar Xcode 16.2
+      - name: 🛠️ Xcode 16.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.2'
 
-      - name: ⚙️ Configurar Node.js
+      - name: ⚙️ Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: 📦 Instalar Dependências
+      - name: 💎 Ruby + CocoaPods estável
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: false
+
+      - name: 📦 Instalar Dependências JS
         run: npm install --legacy-peer-deps
 
-      - name: 🔨 Gerar Projeto Nativo iOS (Prebuild)
+      - name: 🔨 Expo Prebuild
         run: npx expo prebuild --platform ios --clean --non-interactive
         env:
           CI: 1
 
-      - name: 🍎 Instalar CocoaPods
+      - name: 🍎 CocoaPods install
         run: |
+          gem install cocoapods --no-document
           cd ios
-          pod install --repo-update
+          pod install
           cd ..
 
-      - name: 🔍 Listar Schemes disponíveis
-        run: xcodebuild -workspace ios/NOCTIS.xcworkspace -list
+      - name: 🔗 Resolver Swift Package Dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -workspace ios/NOCTIS.xcworkspace \
+            -scheme NOCTIS \
+            -derivedDataPath "$PWD/DerivedData"
 
-      - name: 🏗️ Compilar App (sem assinatura)
+      - name: 🏗️ Build (sem assinatura)
         run: |
           xcodebuild \
             -workspace ios/NOCTIS.xcworkspace \
@@ -56,15 +68,15 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            build 2>&1 | tee build_log.txt
+            2>&1 | tee build_log.txt
           BUILD_EXIT=${PIPESTATUS[0]}
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== ERROS DO BUILD ==="
+            echo "=== ERROS ==="
             grep -E "error:" build_log.txt | grep -v "^note:" | head -60
             exit $BUILD_EXIT
           fi
 
-      - name: 📋 Upload Log de Build (para debug)
+      - name: 📋 Upload log (só se falhar)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -72,22 +84,18 @@ jobs:
           path: build_log.txt
           retention-days: 3
 
-      - name: 📂 Localizar .app gerado
+      - name: 📂 Localizar .app
         id: find_app
         run: |
           APP_PATH=$(find "$PWD/DerivedData" -name "*.app" -type d \
             | grep -v "\.appex" \
             | grep "Release-iphoneos" \
             | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find "$PWD/DerivedData" -name "*.app" -type d \
-              | grep -v "\.appex" \
-              | head -n 1)
-          fi
+          [ -z "$APP_PATH" ] && APP_PATH=$(find "$PWD/DerivedData" -name "*.app" -type d | grep -v "\.appex" | head -n 1)
           echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
-          echo "App encontrado em: $APP_PATH"
+          echo "App: $APP_PATH"
 
-      - name: 📦 Empacotar como NOCTIS.ipa
+      - name: 📦 Empacotar NOCTIS.ipa
         run: |
           mkdir -p Payload
           cp -r "${{ steps.find_app.outputs.app_path }}" Payload/
