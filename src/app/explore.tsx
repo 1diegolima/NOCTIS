@@ -15,7 +15,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { ExerciseSelectorModal } from '@/components/exercise-selector-modal';
 import { PlateCalculatorModal } from '@/components/plate-calculator-modal';
+import { WorkoutDetailModal } from '@/components/workout-detail-modal';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import {
   FullRoutine,
@@ -27,6 +29,7 @@ import {
   PreparedSetSuggestion,
 } from '@/features/workouts/warmup-algorithm';
 import { workoutRepository, WorkoutWithSets, calculateOneRepMax } from '@/features/workouts/workout-repository';
+import { useRestTimer } from '@/contexts/rest-timer-context';
 import { useTabBarHeight } from '@/hooks/use-tab-bar-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useActiveWorkoutStore } from '@/stores/active-workout-store';
@@ -35,17 +38,23 @@ import { haptics } from '@/utils/haptics';
 export default function WorkoutsScreen() {
   const theme = useTheme();
   const tabBarHeight = useTabBarHeight();
+  const { startTimer, stopTimer } = useRestTimer();
 
   const {
     activeWorkout,
+    selectedExercise,
     weightInput,
     repsInput,
+    sessionNotes,
     initialize,
     startNewWorkout,
+    selectExercise,
     setWeightInput,
     setRepsInput,
+    setSessionNotes,
     logCurrentSet,
     deleteSet,
+    undoLastSet,
     finishCurrentWorkout,
     cancelCurrentWorkout,
   } = useActiveWorkoutStore();
@@ -59,6 +68,9 @@ export default function WorkoutsScreen() {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishedDurationMinutes, setFinishedDurationMinutes] = useState(1);
   const [showPlateCalcModal, setShowPlateCalcModal] = useState(false);
+  const [showExerciseSelector, setShowExerciseSelector] = useState(false);
+  const [selectedHistoryWorkoutId, setSelectedHistoryWorkoutId] = useState<string | null>(null);
+  const [prAlert, setPrAlert] = useState<{ exerciseName: string; weightKg: number; reps: number } | null>(null);
 
   // Timer de Descanso
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -187,11 +199,28 @@ export default function WorkoutsScreen() {
   };
 
   const handleLogWorkingSet = () => {
+    const weight = parseFloat(weightInput.replace(',', '.')) || 0;
+    const reps = parseInt(repsInput, 10) || 0;
+    const isPr =
+      currentExercise && weight > 0 && reps > 0
+        ? workoutRepository.checkIsNewPR(currentExercise.id, weight, reps)
+        : { isNewPR: false, prType: null, previousBest: 0 };
+
     const success = logCurrentSet();
     if (success) {
-      haptics.success();
-      // Inicia timer de descanso (120 segundos por padrão)
-      setRestTimer(currentRoutineExercise?.restSeconds || 120);
+      if (isPr.isNewPR && currentExercise) {
+        haptics.heavy();
+        setPrAlert({
+          exerciseName: currentExercise.name,
+          weightKg: weight,
+          reps: reps,
+        });
+      } else {
+        haptics.success();
+      }
+      const restSecs = currentRoutineExercise?.restSeconds || 120;
+      setRestTimer(restSecs);
+      startTimer(restSecs, currentExercise?.name);
     } else {
       Alert.alert('Atenção', 'Informe um peso e quantidade de repetições válidos.');
     }
@@ -203,7 +232,8 @@ export default function WorkoutsScreen() {
     setWeightInput(suggestion.weightKg.toString());
     setRepsInput(suggestion.reps.toString());
     logCurrentSet();
-    setRestTimer(60); // Descanso menor para feeder sets
+    setRestTimer(60);
+    startTimer(60, `${currentExercise.name} (Feeder)`);
   };
 
   const handleDeleteLoggedSet = (setId: string) => {
@@ -227,6 +257,8 @@ export default function WorkoutsScreen() {
     finishCurrentWorkout();
     setShowFinishModal(false);
     setRestTimer(null);
+    stopTimer();
+    setPrAlert(null);
     loadData();
   };
 
@@ -240,6 +272,8 @@ export default function WorkoutsScreen() {
           haptics.medium();
           cancelCurrentWorkout();
           setRestTimer(null);
+          stopTimer();
+          setPrAlert(null);
           loadData();
         },
       },
@@ -274,6 +308,27 @@ export default function WorkoutsScreen() {
                 : 'Escolha uma sessão da sua rotina para iniciar.'}
             </ThemedText>
           </View>
+
+          {/* Banner de Recorde Pessoal Batido (PR) */}
+          {prAlert && (
+            <View
+              style={[
+                styles.prBanner,
+                { backgroundColor: '#854D0E', borderColor: '#FACC15' },
+              ]}>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="caption" style={{ color: '#FEF08A', fontWeight: '800' }}>
+                  🏆 NOVO RECORDE PESSOAL (PR)!
+                </ThemedText>
+                <ThemedText type="smallBold" style={{ color: '#FFFFFF', marginTop: 2 }}>
+                  {prAlert.exerciseName}: {prAlert.weightKg} kg × {prAlert.reps} reps
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setPrAlert(null)} hitSlop={10}>
+                <ThemedText type="smallBold" style={{ color: '#FEF08A' }}>✕</ThemedText>
+              </Pressable>
+            </View>
+          )}
 
           {/* Banner de Timer de Descanso Ativo */}
           {restTimer !== null && (
@@ -404,6 +459,26 @@ export default function WorkoutsScreen() {
                 </ScrollView>
               )}
 
+              {/* Se nenhum exercício foi selecionado ainda (ex: início de treino livre) */}
+              {!currentExercise && (
+                <View style={[styles.emptyRoutineCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                  <ThemedText type="title">Nenhum exercício selecionado</ThemedText>
+                  <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: 'center' }}>
+                    Selecione um exercício do catálogo para registrar suas séries válidas.
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => {
+                      haptics.medium();
+                      setShowExerciseSelector(true);
+                    }}
+                    style={[styles.bigLogBtn, { backgroundColor: theme.primary, marginTop: Spacing.md }]}>
+                    <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                      + Escolher Exercício do Catálogo
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              )}
+
               {/* Detalhes do Exercício Atual + Séries Preparatórias Calculadas */}
               {currentExercise && (
                 <View style={styles.exerciseExecutionSection}>
@@ -414,18 +489,26 @@ export default function WorkoutsScreen() {
                     ]}>
                     <View style={styles.exerciseHeaderTagRow}>
                       <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
-                        EXERCÍCIO {currentExerciseIndex + 1} DE {activeExerciseList.length}
+                        {activeExerciseList.length > 0
+                          ? `EXERCÍCIO ${currentExerciseIndex + 1} DE ${activeExerciseList.length}`
+                          : 'EXERCÍCIO SELECIONADO'}
                       </ThemedText>
-                      <ThemedText
-                        type="caption"
-                        style={{ color: theme.textSecondary, textTransform: 'capitalize' }}>
-                        {currentExercise.muscleGroup} • {currentExercise.movementPattern}
-                      </ThemedText>
+                      <Pressable
+                        onPress={() => {
+                          haptics.light();
+                          setShowExerciseSelector(true);
+                        }}
+                        hitSlop={8}
+                        style={[styles.switchExBtn, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
+                        <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                          🔄 Trocar / Adicionar
+                        </ThemedText>
+                      </Pressable>
                     </View>
                     <ThemedText type="header" style={{ marginTop: 2 }}>{currentExercise.name}</ThemedText>
                     <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs }}>
-                      Alvo: {currentRoutineExercise?.workingSets} séries × {currentRoutineExercise?.repsMin}–
-                      {currentRoutineExercise?.repsMax} reps @ {currentRoutineExercise?.workingWeightKg} kg • Descanso {currentRoutineExercise?.restSeconds}s
+                      {currentExercise.muscleGroup} • {currentExercise.movementPattern}
+                      {currentRoutineExercise ? ` • Alvo: ${currentRoutineExercise.workingSets} séries × ${currentRoutineExercise.repsMin}–${currentRoutineExercise.repsMax} reps @ ${currentRoutineExercise.workingWeightKg} kg` : ''}
                     </ThemedText>
                   </View>
 
@@ -622,9 +705,22 @@ export default function WorkoutsScreen() {
                     </Pressable>
                   </View>
 
-                  {/* Histórico das Séries Registradas Nesta Sessão */}
-                  <View style={styles.sectionHeader}>
+                  {/* Histórico das Séries Registradas Nesta Sessão + Botão Desfazer */}
+                  <View style={styles.sectionHeaderRow}>
                     <ThemedText type="subtitle">Séries Feitas Neste Treino ({activeWorkout.sets.length})</ThemedText>
+                    {activeWorkout.sets.length > 0 && (
+                      <Pressable
+                        onPress={() => {
+                          haptics.medium();
+                          undoLastSet();
+                        }}
+                        hitSlop={8}
+                        style={[styles.undoSetBtn, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
+                        <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                          ↩ Desfazer Série
+                        </ThemedText>
+                      </Pressable>
+                    )}
                   </View>
 
                   <View style={styles.loggedList}>
@@ -653,6 +749,28 @@ export default function WorkoutsScreen() {
                         </Pressable>
                       </View>
                     ))}
+                  </View>
+
+                  {/* Anotações da Sessão */}
+                  <View style={[styles.notesCardBox, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                    <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                      📝 ANOTAÇÕES DA SESSÃO
+                    </ThemedText>
+                    <TextInput
+                      value={sessionNotes}
+                      onChangeText={setSessionNotes}
+                      placeholder="Observações do treino, sensações, dores ou metas..."
+                      placeholderTextColor={theme.textMuted}
+                      multiline
+                      style={[
+                        styles.sessionNotesTextInput,
+                        {
+                          backgroundColor: theme.backgroundElevated,
+                          borderColor: theme.cardBorder,
+                          color: theme.text,
+                        },
+                      ]}
+                    />
                   </View>
                 </View>
               )}
@@ -770,6 +888,34 @@ export default function WorkoutsScreen() {
                 </View>
               )}
 
+              {/* Treino Livre (Sem Divisão) */}
+              <View style={styles.sectionHeader}>
+                <ThemedText type="subtitle">Treino Livre</ThemedText>
+              </View>
+
+              <Pressable
+                onPress={() => {
+                  haptics.medium();
+                  startNewWorkout('Treino Livre');
+                  setShowExerciseSelector(true);
+                }}
+                style={[
+                  styles.freeWorkoutCard,
+                  { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                ]}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="smallBold">⚡ Iniciar Treino Livre</ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                    Treine livremente sem rotina fixa. Escolha qualquer exercício do catálogo.
+                  </ThemedText>
+                </View>
+                <View style={[styles.startChip, { backgroundColor: theme.primary, borderColor: theme.primaryHover }]}>
+                  <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                    Iniciar ➔
+                  </ThemedText>
+                </View>
+              </Pressable>
+
               {/* Histórico de Treinos Concluídos */}
               <View style={styles.sectionHeader}>
                 <ThemedText type="subtitle">Histórico Recente</ThemedText>
@@ -788,8 +934,12 @@ export default function WorkoutsScreen() {
               ) : (
                 <View style={styles.historyList}>
                   {history.map((w) => (
-                    <View
+                    <Pressable
                       key={w.id}
+                      onPress={() => {
+                        haptics.light();
+                        setSelectedHistoryWorkoutId(w.id);
+                      }}
                       style={[
                         styles.historyItemCard,
                         { backgroundColor: theme.card, borderColor: theme.cardBorder },
@@ -800,10 +950,15 @@ export default function WorkoutsScreen() {
                           {new Date(w.startedAt).toLocaleDateString('pt-BR')}
                         </ThemedText>
                       </View>
-                      <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4 }}>
-                        {w.sets.length} séries registradas
-                      </ThemedText>
-                    </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                          {w.sets.length} séries registradas
+                        </ThemedText>
+                        <ThemedText type="caption" style={{ color: theme.primaryHover, fontWeight: '700' }}>
+                          Ver Detalhes →
+                        </ThemedText>
+                      </View>
+                    </Pressable>
                   ))}
                 </View>
               )}
@@ -1035,6 +1190,28 @@ export default function WorkoutsScreen() {
                   ))}
                 </ScrollView>
 
+                {/* Anotações no Resumo do Treino */}
+                <View style={[styles.finishNotesBox, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                  <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+                    📝 ANOTAÇÕES DO TREINO (OPCIONAL)
+                  </ThemedText>
+                  <TextInput
+                    value={sessionNotes}
+                    onChangeText={setSessionNotes}
+                    placeholder="Como foi o treino hoje? RPE, dores, metas batidas..."
+                    placeholderTextColor={theme.textMuted}
+                    multiline
+                    style={[
+                      styles.finishNotesInput,
+                      {
+                        backgroundColor: theme.backgroundElevated,
+                        borderColor: theme.cardBorder,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
+                </View>
+
                 <View style={styles.previewActions}>
                   <Pressable
                     onPress={handleConfirmFinish}
@@ -1067,6 +1244,24 @@ export default function WorkoutsScreen() {
           onApplyWeight={(weight) => {
             setWeightInput(weight.toString());
           }}
+        />
+
+        {/* Modal: Seletor de Exercícios */}
+        <ExerciseSelectorModal
+          visible={showExerciseSelector}
+          onClose={() => setShowExerciseSelector(false)}
+          onSelectExercise={(ex) => {
+            selectExercise(ex);
+            setShowExerciseSelector(false);
+          }}
+        />
+
+        {/* Modal: Detalhes do Treino Histórico */}
+        <WorkoutDetailModal
+          workoutId={selectedHistoryWorkoutId}
+          visible={selectedHistoryWorkoutId !== null}
+          onClose={() => setSelectedHistoryWorkoutId(null)}
+          onDeleted={loadData}
         />
       </Pressable>
     </KeyboardAvoidingView>
@@ -1450,5 +1645,71 @@ const styles = StyleSheet.create({
   plateCalcTriggerBtn: {
     paddingHorizontal: Spacing.xs,
     paddingVertical: 1,
+  },
+  prBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1.5,
+    marginVertical: Spacing.xs,
+  },
+  switchExBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  undoSetBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+  },
+  notesCardBox: {
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  sessionNotesTextInput: {
+    minHeight: 64,
+    padding: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    fontSize: 13,
+    textAlignVertical: 'top',
+  },
+  freeWorkoutCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: Spacing.md,
+  },
+  finishNotesBox: {
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  finishNotesInput: {
+    minHeight: 56,
+    padding: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
+    fontSize: 13,
+    textAlignVertical: 'top',
   },
 });

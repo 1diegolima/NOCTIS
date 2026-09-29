@@ -12,8 +12,10 @@ import {
   type Exercise,
 } from '@/database/schema';
 
+export type WorkoutSetWithExercise = SessionSet & { exercise: Exercise | null };
+
 export interface WorkoutWithSets extends WorkoutSession {
-  sets: (SessionSet & { exercise: Exercise | null })[];
+  sets: WorkoutSetWithExercise[];
 }
 
 export const workoutRepository = {
@@ -192,6 +194,33 @@ export const workoutRepository = {
     }
 
     return { maxWeight, max1RM, maxVolumeSet };
+  },
+
+  /**
+   * Verifica se uma série recém-executada quebrou um Recorde Pessoal (PR)
+   */
+  checkIsNewPR(
+    exerciseId: string,
+    weightKg: number,
+    reps: number
+  ): { isNewPR: boolean; prType: 'weight' | '1rm' | null; previousBest: number } {
+    if (weightKg <= 0 || reps <= 0) {
+      return { isNewPR: false, prType: null, previousBest: 0 };
+    }
+
+    const currentPR = workoutRepository.getExercisePR(exerciseId);
+    if (!currentPR) {
+      return { isNewPR: true, prType: 'weight', previousBest: 0 };
+    }
+
+    const est1rm = calculateOneRepMax(weightKg, reps);
+    if (weightKg > currentPR.maxWeight) {
+      return { isNewPR: true, prType: 'weight', previousBest: currentPR.maxWeight };
+    }
+    if (est1rm > currentPR.max1RM && currentPR.max1RM > 0) {
+      return { isNewPR: true, prType: '1rm', previousBest: currentPR.max1RM };
+    }
+    return { isNewPR: false, prType: null, previousBest: currentPR.maxWeight };
   },
 
   /**
