@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PhotoComparatorModal } from '@/components/photo-comparator-modal';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import {
@@ -59,6 +60,7 @@ export default function PhotosScreen() {
   const [entries, setEntries] = useState<FullEvolutionEntry[]>([]);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [fullscreenPhotoUri, setFullscreenPhotoUri] = useState<string | null>(null);
+  const [showComparatorModal, setShowComparatorModal] = useState(false);
 
   // Overlay Novo Mês
   const [showAddMonthModal, setShowAddMonthModal] = useState(false);
@@ -242,16 +244,30 @@ export default function PhotosScreen() {
                   Acompanhamento fotográfico mensal.
                 </ThemedText>
               </View>
-              <Pressable
-                onPress={() => {
-                  haptics.medium();
-                  setShowAddMonthModal(true);
-                }}
-                style={[styles.addMonthBtn, { backgroundColor: theme.primary }]}>
-                <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
-                  + Novo Mês
-                </ThemedText>
-              </Pressable>
+              <View style={{ flexDirection: 'row', gap: Spacing.xs }}>
+                {entries.length >= 2 && (
+                  <Pressable
+                    onPress={() => {
+                      haptics.light();
+                      setShowComparatorModal(true);
+                    }}
+                    style={[styles.compareBtn, { backgroundColor: theme.backgroundElevated, borderColor: theme.cardBorder }]}>
+                    <ThemedText type="smallBold" style={{ color: theme.primaryHover }}>
+                      ⇄ Comparar
+                    </ThemedText>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => {
+                    haptics.medium();
+                    setShowAddMonthModal(true);
+                  }}
+                  style={[styles.addMonthBtn, { backgroundColor: theme.primary }]}>
+                  <ThemedText type="smallBold" style={{ color: '#FFFFFF' }}>
+                    + Novo Mês
+                  </ThemedText>
+                </Pressable>
+              </View>
             </View>
           </View>
 
@@ -780,6 +796,13 @@ export default function PhotosScreen() {
           />
         </View>
       )}
+
+      {/* OVERLAY COMPARADOR DE EVOLUÇÃO (ANTES & DEPOIS) */}
+      <PhotoComparatorModal
+        visible={showComparatorModal}
+        entries={entries}
+        onClose={() => setShowComparatorModal(false)}
+      />
     </View>
   );
 }
@@ -805,6 +828,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  compareBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.xs,
+    borderWidth: 1,
   },
   addMonthBtn: {
     paddingHorizontal: Spacing.md,
